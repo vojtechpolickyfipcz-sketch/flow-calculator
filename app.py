@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Nastavení vzhledu stránky
-st.set_page_config(page_title="Hydraulický Srovnávač 4.1", layout="wide")
+st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
-st.title("📊 Hydraulický srovnávač: Hladká vs. Vlnitá trubka")
-st.markdown("Nástroj pro porovnání tlakových ztrát různých technických řešení.")
+st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
+st.markdown("Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.")
 
 # --- SIDEBAR: SPOLEČNÉ PARAMETRY ---
 with st.sidebar:
@@ -37,6 +37,9 @@ variants = []
 for i in range(4):
     with cols[i]:
         st.info(f"Varianta {i+1}")
+        # NOVÉ POLE PRO POZNÁMKU/NÁZEV
+        v_label = st.text_input(f"Název/Poznámka", value=f"Varianta {i+1}", key=f"lab{i}", help="Pojmenujte variantu pro legendu grafu (např. NW12 Sinus)")
+        
         v_type = st.selectbox(f"Typ", ["Hladká", "Vlnitá"], index=(1 if i > 0 else 0), key=f"t{i}")
         d_min = st.number_input(f"Vnitřní Ø [mm]", value=12.0, step=0.01, key=f"dmin{i}")
         
@@ -45,11 +48,11 @@ for i in range(4):
             pitch = st.selectbox(f"Rozteč [mm]", [3.1, 3.3, 3.7, 4.0, 4.65], index=2, key=f"p{i}")
         else:
             d_max = d_min
-            pitch = 3.7 # Default pro výpočet
+            pitch = 3.7
             st.write("---")
-            st.caption("Parametry vlnovce nejsou pro hladkou trubku vyžadovány.")
+            st.caption("Parametry vlnovce nejsou vyžadovány.")
             
-        variants.append({"type": v_type, "d_min": d_min, "d_max": d_max, "pitch": pitch})
+        variants.append({"label": v_label, "type": v_type, "d_min": d_min, "d_max": d_max, "pitch": pitch})
 
 # --- VÝPOČETNÍ LOGIKA ---
 def calculate_dp(v_cfg, flow_list):
@@ -77,9 +80,11 @@ if st.button("🚀 SPOČÍTAT A GENEROVAT GRAF", use_container_width=True):
 
     for i, v in enumerate(variants):
         dp_curve = calculate_dp(v, flow_axis)
-        ax.plot(flow_axis, dp_curve, lw=2.5, label=f"Var {i+1}: {v['type']}")
+        # Graf nyní používá váš vlastní label (v['label'])
+        ax.plot(flow_axis, dp_curve, lw=2.5, label=v['label'])
         results.append({
-            "Varianta": f"Var {i+1}",
+            "Název": v['label'],
+            "Typ": v['type'],
             "Konfigurace": f"Ø{v['d_min']:.2f}" if v['type'] == "Hladká" else f"Ø{v['d_min']:.2f}/Ø{v['d_max']:.2f} p{v['pitch']}",
             "Ztráta [kPa]": dp_curve[-1]
         })
