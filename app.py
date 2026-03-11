@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# --- SLOVNÍK PŘEKLADŮ (Verze 3: Pressure Drop Solution Designer) ---
+# --- 1. SLOVNÍK PŘEKLADŮ (Pressure Drop Solution Designer) ---
 lang_dict = {
     "Čeština": {
         "title": "🔍 Pressure Drop Solution Designer",
@@ -135,110 +135,132 @@ lang_dict = {
     }
 }
 
-# Nastavení vzhledu stránky
+# --- 2. NASTAVENÍ STRÁNKY A SIDEBARU ---
 st.set_page_config(page_title="Pressure Drop Solution Designer", layout="wide")
 
-# --- VÝBĚR JAZYKA ---
 with st.sidebar:
+    # Zobrazení LOGA (soubor logo.png musí být na GitHubu)
+    try:
+        st.image("logo.png", use_container_width=True)
+    except:
+        st.caption("ℹ️ Nahrajte 'logo.png' pro zobrazení loga firmy.")
+    
     st.header("🌐 Language / Jazyk")
-    sel_lang = st.selectbox("Select language / Vyberte jazyk", ["Čeština", "Deutsch", "English", "Română"])
+    sel_lang = st.selectbox("Select language / Vyberte jazyk", list(lang_dict.keys()))
     L = lang_dict[sel_lang]
-
-st.title(L["title"])
-st.markdown(f"**{L['subtitle']}**")
-
-# --- SIDEBAR: SPOLEČNÉ PARAMETRY ---
-with st.sidebar:
+    
     st.divider()
     st.header(L["fluid_params"])
     fluid_name = st.text_input(L["fluid_name"], "G12+ Specifikace")
-    temp = st.number_input(L["temp"], value=22.0, step=0.1)
+    temp_val = st.number_input(L["temp"], value=22.0, step=0.1)
     
     col_d1, col_d2 = st.columns([2, 1])
     with col_d1:
-        dens_val = st.number_input(L["density"], value=1060.0, step=0.1)
+        dens_input = st.number_input(L["density"], value=1060.0, step=0.1)
     with col_d2:
-        dens_unit = st.selectbox(L["unit"], ["kg/m³", "g/cm³"])
+        dens_unit_val = st.selectbox(L["unit"], ["kg/m³", "g/cm³"])
     
-    visc = st.number_input(L["viscosity"], value=0.0030, format="%.4f", step=0.0001)
+    visc_val = st.number_input(L["viscosity"], value=0.0030, format="%.4f", step=0.0001)
     
     st.header(L["geometry"])
-    length = st.number_input(L["length"], value=500.0, step=0.01)
-    flow_max = st.slider(L["flow_max"], 0.5, 100.0, 25.0, 0.5)
+    length_val = st.number_input(L["length"], value=500.0, step=0.01)
+    flow_max_val = st.slider(L["flow_max"], 0.5, 100.0, 25.0, 0.5)
 
-final_density = dens_val * 1000 if dens_unit == "g/cm³" else dens_val
+# Přepočet hustoty
+final_density = dens_input * 1000 if dens_unit_val == "g/cm³" else dens_input
 
-# --- HLAVNÍ ČÁST: 4 VARIANTY ---
+# --- 3. HLAVNÍ OBSAH (ZÁHLAVÍ) ---
+st.title(L["title"])
+st.markdown(f"#### {L['subtitle']}")
+st.divider()
+
+# --- 4. KONFIGURACE VARIANT ---
 st.subheader(L["config"])
 cols = st.columns(4)
-variants = []
+variants_list = []
 
 for i in range(4):
     with cols[i]:
         st.info(f"{L['variant']} {i+1}")
-        v_label = st.text_input(f"{L['label']}", value=f"{L['variant']} {i+1}", key=f"lab{i}")
+        v_label_val = st.text_input(L["label"], value=f"{L['variant']} {i+1}", key=f"lab{i}")
         
         v_type_sel = st.selectbox(L["type"], [L["smooth"], L["corrugated"]], index=(1 if i > 0 else 0), key=f"t{i}")
-        v_type = "Vlnitá" if v_type_sel == L["corrugated"] else "Hladká"
+        v_type_internal = "Vlnitá" if v_type_sel == L["corrugated"] else "Hladká"
         
-        d_min = st.number_input(L["in_diam"], value=12.0, step=0.01, key=f"dmin{i}")
+        d_min_val = st.number_input(L["in_diam"], value=12.0, step=0.01, key=f"dmin{i}")
         
-        if v_type == "Vlnitá":
-            d_max = st.number_input(L["max_diam"], value=15.0, step=0.01, key=f"dmax{i}")
-            pitch = st.selectbox(L["pitch"], [3.1, 3.3, 3.7, 4.0, 4.65], index=2, key=f"p{i}")
+        if v_type_internal == "Vlnitá":
+            d_max_val = st.number_input(L["max_diam"], value=15.0, step=0.01, key=f"dmax{i}")
+            pitch_val = st.selectbox(L["pitch"], [3.1, 3.3, 3.7, 4.0, 4.65], index=2, key=f"p{i}")
         else:
-            d_max = d_min
-            pitch = 3.7
+            d_max_val = d_min_val
+            pitch_val = 3.7
             st.write("---")
             st.caption(L["not_req"])
             
-        variants.append({"label": v_label, "type": v_type, "d_min": d_min, "d_max": d_max, "pitch": pitch})
+        variants_list.append({
+            "label": v_label_val, 
+            "type": v_type_internal, 
+            "d_min": d_min_val, 
+            "d_max": d_max_val, 
+            "pitch": pitch_val
+        })
 
-# --- VÝPOČETNÍ LOGIKA ---
-def calculate_dp(v_cfg, flow_list):
-    flow_m3s = flow_list / (60 * 1000)
+# --- 5. FYZIKÁLNÍ JÁDRO ---
+def calculate_dp(v_cfg, flows):
+    flow_m3s = flows / (60 * 1000)
     d_m = v_cfg['d_min'] / 1000
     v_vel = flow_m3s / (np.pi * (d_m/2)**2)
-    Re = (final_density * v_vel * d_m) / (visc if visc > 0 else 0.000001)
+    # Re výpočet (ošetření dělení nulou u viskozity)
+    safe_visc = visc_val if visc_val > 0 else 0.000001
+    Re = (final_density * v_vel * d_m) / safe_visc
+    
+    # Lambda - Laminární / Turbulentní
     l_smooth = np.array([(64/r if r < 2300 else 0.3164/r**0.25) for r in Re])
     
     if v_cfg['type'] == "Vlnitá":
         rel_rough = (v_cfg['d_max'] - v_cfg['d_min']) / (2 * v_cfg['d_min'])
+        # Korekční faktor pro vlnovce
         corr = 1 + (rel_rough * 12) * (0.004 / (v_cfg['pitch']/1000))
         l_final = l_smooth * max(corr, 3.2)
     else:
         l_final = l_smooth
         
-    dp_pa = l_final * ((length/1000) / d_m) * (final_density * v_vel**2 / 2)
-    return dp_pa / 1000
+    dp_pa = l_final * ((length_val/1000) / d_m) * (final_density * v_vel**2 / 2)
+    return dp_pa / 1000 # Výstup v kPa
 
-# --- VÝSTUPY ---
+# --- 6. VÝSTUPY (GRAF A TABULKA) ---
+st.divider()
 if st.button(L["btn"], use_container_width=True):
-    flow_axis = np.linspace(0.1, flow_max, 100)
-    fig, ax = plt.subplots(figsize=(10, 5))
-    results = []
+    flow_axis = np.linspace(0.1, flow_max_val, 100)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    results_data = []
 
-    for i, v in enumerate(variants):
+    for i, v in enumerate(variants_list):
         dp_curve = calculate_dp(v, flow_axis)
-        ax.plot(flow_axis, dp_curve, lw=2.5, label=v['label'])
-        results.append({
+        ax.plot(flow_axis, dp_curve, lw=3, label=v['label'])
+        
+        results_data.append({
             L["col_name"]: v['label'],
             L["col_type"]: L["corrugated"] if v['type'] == "Vlnitá" else L["smooth"],
             L["col_conf"]: f"Ø{v['d_min']:.2f}" if v['type'] == "Hladká" else f"Ø{v['d_min']:.2f}/Ø{v['d_max']:.2f} p{v['pitch']}",
-            L["col_loss"]: dp_curve[-1]
+            "raw_loss": dp_curve[-1]
         })
 
-    ax.set_title(f"{L['report']}: {fluid_name} @ {temp}°C")
+    ax.set_title(f"{L['report']}: {fluid_name} @ {temp_val}°C", fontsize=14, fontweight='bold')
     ax.set_xlabel(L["xlabel"])
     ax.set_ylabel(L["ylabel"])
     ax.legend()
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, alpha=0.3, linestyle='--')
     
     st.pyplot(fig)
 
-    # Tabulka
-    df = pd.DataFrame(results)
-    ref_val = df.iloc[0][L["col_loss"]]
-    df[L["col_loss"]] = df[L["col_loss"]].map('{:.3f}'.format)
-    df[L["col_diff"]] = df[L["col_loss"]].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
-    st.table(df)
+    # Příprava tabulky
+    df = pd.DataFrame(results_data)
+    ref_val = df.iloc[0]["raw_loss"]
+    
+    df[L["col_loss"]] = df["raw_loss"].map('{:.3f}'.format)
+    df[L["col_diff"]] = df["raw_loss"].apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
+    
+    # Zobrazení bez pomocného sloupce
+    st.table(df[[L["col_name"], L["col_type"], L["col_conf"], L["col_loss"], L["col_diff"]]])
