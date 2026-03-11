@@ -3,11 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# --- SLOVNÍK PŘEKLADŮ ---
+# --- SLOVNÍK PŘEKLADŮ (Verze 3: Pressure Drop Solution Designer) ---
 lang_dict = {
     "Čeština": {
-        "title": "📊 Hydraulický srovnávač",
-        "subtitle": "Nástroj pro porovnání tlakových ztrát: Hladká vs. Vlnitá trubka",
+        "title": "🔍 Pressure Drop Solution Designer",
+        "subtitle": "Kalkulátor poklesu tlaku dle zvoleného technického řešení",
         "fluid_params": "💧 Parametry média",
         "fluid_name": "Název kapaliny",
         "temp": "Teplota měření [°C]",
@@ -27,8 +27,8 @@ lang_dict = {
         "max_diam": "Maximální Ø [mm]",
         "pitch": "Rozteč [mm]",
         "not_req": "Parametry vlnovce nejsou vyžadovány.",
-        "btn": "🚀 SPOČÍTAT A GENEROVAT GRAF",
-        "report": "Report",
+        "btn": "🚀 GENEROVAT ANALÝZU ŘEŠENÍ",
+        "report": "Technický report",
         "xlabel": "Průtok [l/min]",
         "ylabel": "Tlaková ztráta [kPa]",
         "col_name": "Název",
@@ -38,8 +38,8 @@ lang_dict = {
         "col_diff": "Rozdíl k Var 1"
     },
     "Deutsch": {
-        "title": "📊 Hydraulik-Vergleichsrechner",
-        "subtitle": "Werkzeug zum Vergleich von Druckverlusten: Glattrohr vs. Wellrohr",
+        "title": "🔍 Pressure Drop Solution Designer",
+        "subtitle": "Druckverlust-Rechner nach technischer Lösung",
         "fluid_params": "💧 Medienparameter",
         "fluid_name": "Flüssigkeitsname",
         "temp": "Messtemperatur [°C]",
@@ -59,8 +59,8 @@ lang_dict = {
         "max_diam": "Maximal-Ø [mm]",
         "pitch": "Teilung [mm]",
         "not_req": "Wellrohrparameter nicht erforderlich.",
-        "btn": "🚀 BERECHNEN UND GRAFIK ERZEUGEN",
-        "report": "Bericht",
+        "btn": "🚀 LÖSUNGSANALYSE GENERIEREN",
+        "report": "Technischer Bericht",
         "xlabel": "Durchfluss [l/min]",
         "ylabel": "Druckverlust [kPa]",
         "col_name": "Name",
@@ -70,8 +70,8 @@ lang_dict = {
         "col_diff": "Unterschied zu Var 1"
     },
     "English": {
-        "title": "📊 Hydraulic Comparator",
-        "subtitle": "Pressure drop comparison tool: Smooth vs. Corrugated pipe",
+        "title": "🔍 Pressure Drop Solution Designer",
+        "subtitle": "Pressure drop calculator by technical solution",
         "fluid_params": "💧 Fluid Parameters",
         "fluid_name": "Fluid Name",
         "temp": "Measurement Temp [°C]",
@@ -91,8 +91,8 @@ lang_dict = {
         "max_diam": "Maximum Ø [mm]",
         "pitch": "Pitch [mm]",
         "not_req": "Corrugation parameters not required.",
-        "btn": "🚀 CALCULATE AND GENERATE GRAPH",
-        "report": "Report",
+        "btn": "🚀 GENERATE SOLUTION ANALYSIS",
+        "report": "Technical Report",
         "xlabel": "Flow rate [l/min]",
         "ylabel": "Pressure drop [kPa]",
         "col_name": "Name",
@@ -102,8 +102,8 @@ lang_dict = {
         "col_diff": "Diff to Var 1"
     },
     "Română": {
-        "title": "📊 Comparator Hidraulic",
-        "subtitle": "Instrument comparare căderi de presiune: Teavă Netedă vs. Ondulată",
+        "title": "🔍 Pressure Drop Solution Designer",
+        "subtitle": "Calculator cădere de presiune conform soluției tehnice",
         "fluid_params": "💧 Parametri Fluid",
         "fluid_name": "Numele fluidului",
         "temp": "Temp. de măsurare [°C]",
@@ -123,8 +123,8 @@ lang_dict = {
         "max_diam": "Ø Maxim [mm]",
         "pitch": "Pas [mm]",
         "not_req": "Parametrii de ondulare nu sunt necesari.",
-        "btn": "🚀 CALCULEAZĂ ȘI GENEREAZĂ GRAFICUL",
-        "report": "Raport",
+        "btn": "🚀 GENEREAZĂ ANALIZA SOLUȚIEI",
+        "report": "Raport tehnic",
         "xlabel": "Debit [l/min]",
         "ylabel": "Cădere de presiune [kPa]",
         "col_name": "Nume",
@@ -136,16 +136,16 @@ lang_dict = {
 }
 
 # Nastavení vzhledu stránky
-st.set_page_config(page_title="Hydraulic Comparator 4.3", layout="wide")
+st.set_page_config(page_title="Pressure Drop Solution Designer", layout="wide")
 
 # --- VÝBĚR JAZYKA ---
 with st.sidebar:
     st.header("🌐 Language / Jazyk")
     sel_lang = st.selectbox("Select language / Vyberte jazyk", ["Čeština", "Deutsch", "English", "Română"])
-    L = lang_dict[sel_lang] # Aktuální slovník překladů
+    L = lang_dict[sel_lang]
 
 st.title(L["title"])
-st.markdown(L["subtitle"])
+st.markdown(f"**{L['subtitle']}**")
 
 # --- SIDEBAR: SPOLEČNÉ PARAMETRY ---
 with st.sidebar:
@@ -179,7 +179,6 @@ for i in range(4):
         v_label = st.text_input(f"{L['label']}", value=f"{L['variant']} {i+1}", key=f"lab{i}")
         
         v_type_sel = st.selectbox(L["type"], [L["smooth"], L["corrugated"]], index=(1 if i > 0 else 0), key=f"t{i}")
-        # Mapování zpět na interní klíče
         v_type = "Vlnitá" if v_type_sel == L["corrugated"] else "Hladká"
         
         d_min = st.number_input(L["in_diam"], value=12.0, step=0.01, key=f"dmin{i}")
@@ -200,7 +199,7 @@ def calculate_dp(v_cfg, flow_list):
     flow_m3s = flow_list / (60 * 1000)
     d_m = v_cfg['d_min'] / 1000
     v_vel = flow_m3s / (np.pi * (d_m/2)**2)
-    Re = (final_density * v_vel * d_m) / visc
+    Re = (final_density * v_vel * d_m) / (visc if visc > 0 else 0.000001)
     l_smooth = np.array([(64/r if r < 2300 else 0.3164/r**0.25) for r in Re])
     
     if v_cfg['type'] == "Vlnitá":
