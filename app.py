@@ -54,6 +54,19 @@ init_db()
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
+# Vlastní CSS: Zvětšení šířky sidebaru o ~20%
+st.markdown(
+    """
+    <style>
+        [data-testid="stSidebar"] {
+            min-width: 405px;
+            max-width: 405px;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- HLAVNÍ HLAVIČKA ---
 st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
 st.markdown("Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.")
@@ -185,9 +198,5 @@ if st.button("🚀 SPOČÍTAT A GENEROVAT GRAF", use_container_width=True):
 with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
-with open("requirements.txt", "w", encoding="utf-8") as f:
-    f.write("streamlit\nnumpy\nmatplotlib\npandas\n")
-
 from google.colab import files
 files.download("app.py")
-files.download("requirements.txt")
