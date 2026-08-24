@@ -54,7 +54,7 @@ init_db()
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
-# Vlastní CSS: Šířka sidebaru a zákaz zvětšovacího tlačítka u obrázků
+# Vlastní CSS: Šířka sidebaru a zákaz fullscreenu
 st.markdown(
     """
     <style>
@@ -75,11 +75,11 @@ st.markdown(
 
 # --- JAZYKOVÉ SLOVNÍKY ---
 LANGUAGES = {
-    "🇨🇿 Čeština": "cs",
-    "🇬🇧 English": "en",
-    "🇩🇪 Deutsch": "de",
-    "🇷🇴 Română": "ro",
-    "🇲🇽 Español (México)": "es"
+    "🇨🇿 CZ": "cs",
+    "🇬🇧 EN": "en",
+    "🇩🇪 DE": "de",
+    "🇷🇴 RO": "ro",
+    "🇲🇽 ES": "es"
 }
 
 TRANSLATIONS = {
@@ -122,7 +122,6 @@ TRANSLATIONS = {
         "res_cfg": "Konfigurace",
         "res_loss": "Ztráta [kPa]",
         "res_diff": "Rozdíl k Var 1",
-        "manual_title": "📖 Uživatelský manuál: Hydraulický Srovnávač",
         "manual_body": """
 ### 1. 🎯 Úvod a k čemu aplikace slouží
 Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát ($\\Delta p$) při proudění kapalin v potrubí. Umožňuje přímo porovnat chování hladkých trubek a trubek s vlnovcovým profilem.
@@ -190,33 +189,17 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_cfg": "Configuration",
         "res_loss": "Loss [kPa]",
         "res_diff": "Diff to Var 1",
-        "manual_title": "📖 User Manual: Hydraulic Comparator",
         "manual_body": """
 ### 1. 🎯 Purpose and Overview
-The Hydraulic Comparator is an interactive web tool for quick calculation and comparison of pressure drops ($\\Delta p$) in fluid piping. It allows direct comparison between smooth tubes and corrugated profiles.
+The Hydraulic Comparator is an interactive web tool for quick calculation and comparison of pressure drops ($\\Delta p$) in fluid piping.
 
 ---
 
 ### 2. ⚡ Quick Workflow
-* **[1. Sidebar]** Enter fluid properties (density, viscosity, temperature) and total tube length.
-* **[2. Main Screen]** Configure up to 4 comparison variants (type, diameters, pitch).
-* **[3. Button]** Click the **🚀 CALCULATE AND GENERATE CHART** button.
-* **[4. Evaluation]** Review curves in the graph and the summary table.
-
----
-
-### 3. ⚙️ Parameters Description
-* **Fluid Name:** Identifier displayed in the chart title.
-* **Viscosity [Pa·s]:** Dynamic viscosity (water $\\approx 0.0010$, coolants higher).
-* **Inner Ø ($d_{min}$):** Inner nominal diameter.
-* **Max Ø ($d_{max}$):** Outer peak diameter for corrugated profile.
-* **Pitch ($p$):** Distance between consecutive corrugation crests.
-
----
-
-### 4. 📊 Output Interpretation
-* **Chart:** Displays pressure drop [kPa] as a function of flow rate [l/min].
-* **Summary Table:** Shows exact values at maximum flow rate and percentage difference relative to Variant 1.
+* **[1. Sidebar]** Enter fluid properties and total length.
+* **[2. Main Screen]** Configure up to 4 variants.
+* **[3. Button]** Click **🚀 CALCULATE AND GENERATE CHART**.
+* **[4. Evaluation]** Review curves and summary table.
         """
     },
     "de": {
@@ -258,15 +241,14 @@ The Hydraulic Comparator is an interactive web tool for quick calculation and co
         "res_cfg": "Konfiguration",
         "res_loss": "Verlust [kPa]",
         "res_diff": "Diff. zu Var 1",
-        "manual_title": "📖 Benutzerhandbuch: Hydraulischer Vergleicher",
         "manual_body": """
 ### 1. 🎯 Einführung
-Interaktives Werkzeug zur schnellen Berechnung und zum Vergleich von Druckverlusten ($\\Delta p$) in Rohrleitungen zwischen glatten und gewellten Profilen.
+Interaktives Werkzeug zur schnellen Berechnung und zum Vergleich von Druckverlusten ($\\Delta p$) in Rohrleitungen.
 
 ---
 
 ### 2. ⚡ Kurzanleitung
-* **[1. Seitenleiste]** Mediendaten (Dichte, Viskosität, Temperatur) und Rohrlänge eingeben.
+* **[1. Seitenleiste]** Mediendaten und Rohrlänge eingeben.
 * **[2. Hauptbereich]** Bis zu 4 Varianten konfigurieren.
 * **[3. Ausführen]** Auf **🚀 BERECHNEN** klicken.
 * **[4. Ergebnis]** Diagramm und Vergleichstabelle auswerten.
@@ -311,10 +293,9 @@ Interaktives Werkzeug zur schnellen Berechnung und zum Vergleich von Druckverlus
         "res_cfg": "Configurație",
         "res_loss": "Pierdere [kPa]",
         "res_diff": "Dif. față de Var 1",
-        "manual_title": "📖 Manual de Utilizare: Comparator Hidraulic",
         "manual_body": """
 ### 1. 🎯 Scop și Utilizare
-Instrument interactiv pentru calculul rapid și compararea căderilor de presiune ($\\Delta p$) în conducte între profiluri netede și ondulate.
+Instrument interactiv pentru calculul rapid și compararea căderilor de presiune ($\\Delta p$) în conducte.
 
 ---
 
@@ -364,10 +345,9 @@ Instrument interactiv pentru calculul rapid și compararea căderilor de presiun
         "res_cfg": "Configuración",
         "res_loss": "Pérdida [kPa]",
         "res_diff": "Dif. vs Var 1",
-        "manual_title": "📖 Manual de Usuario: Comparador Hidráulico",
         "manual_body": """
 ### 1. 🎯 Introducción
-Herramienta interactiva para calcular y comparar pérdidas de presión ($\\Delta p$) en tuberías entre perfiles lisos y corrugados.
+Herramienta interactiva para calcular y comparar pérdidas de presión ($\\Delta p$) en tuberías.
 
 ---
 
@@ -385,23 +365,27 @@ Herramienta interactiva para calcular y comparar pérdidas de presión ($\\Delta
 def show_manual(lang_code):
     st.markdown(TRANSLATIONS[lang_code]["manual_body"])
 
-# --- HLAVNÍ HLAVIČKA S PŘEPÍNAČEM JAZYKŮ A NÁPOVĚDOU ---
-top_col1, top_col2, top_col3 = st.columns([5, 2, 1.5])
+# --- HLAVNÍ HLAVIČKA S PŘEPÍNAČEM JAZYKŮ NAD TLAČÍTKEM NÁPOVĚDY ---
+top_left, top_right = st.columns([4.5, 1.5])
 
-with top_col2:
-    selected_lang_label = st.selectbox("🌐 Jazyk / Language", list(LANGUAGES.keys()), label_visibility="collapsed")
+with top_right:
+    # 1. Kompaktní výběr jazyka s vlaječkami
+    selected_lang_label = st.selectbox(
+        "Jazyk",
+        options=list(LANGUAGES.keys()),
+        label_visibility="collapsed"
+    )
     lang = LANGUAGES[selected_lang_label]
+    t = TRANSLATIONS[lang]
 
-with top_col3:
-    if st.button(TRANSLATIONS[lang]["btn_manual"], use_container_width=True):
+    # 2. Tlačítko nápovědy přímo pod jazykem
+    if st.button(t["btn_manual"], use_container_width=True):
         show_manual(lang)
 
-with top_col1:
-    st.title(TRANSLATIONS[lang]["title"])
+with top_left:
+    st.title(t["title"])
 
-st.markdown(TRANSLATIONS[lang]["subtitle"])
-
-t = TRANSLATIONS[lang]
+st.markdown(t["subtitle"])
 
 # --- SIDEBAR (LEVÝ SLOUPEC) ---
 with st.sidebar:
