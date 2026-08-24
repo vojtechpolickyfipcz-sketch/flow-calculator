@@ -62,7 +62,6 @@ st.markdown(
             min-width: 405px;
             max-width: 405px;
         }
-        /* Skrytí tlačítka pro zvětšení obrázku (fullscreen) */
         button[title="View fullscreen"],
         [data-testid="StyledFullScreenButton"] {
             display: none !important;
@@ -74,13 +73,89 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- HLAVNÍ HLAVIČKA ---
-st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
+# --- DIALOGOVÉ OKNO PRO NÁPOVĚDU ---
+@st.dialog("📖 Uživatelský manuál: Hydraulický Srovnávač", width="large")
+def show_manual():
+    st.markdown("""
+### 1. 🎯 Úvod a k čemu aplikace slouží
+Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát ($\\Delta p$) při proudění kapalin v potrubí.
+Umožňuje přímo porovnat chování hladkých trubek a trubek s vlnovcovým profilem (vlnitých). Aplikace vizualizuje, jaký hydraulický odpor vytváří vlnění trubky v závislosti na zvoleném průtoku, geometrii profilu a vlastnostech proudícího média.
+
+---
+
+### 2. ⚡ Rychlý postup práce (Krok za krokem)
+* **[1. Levý panel]** Zadejte vlastnosti kapaliny (hustota, viskozita, teplota) a společnou délku trasy.
+* **[2. Hlavní plocha]** Nakonfigurujte až 4 porovnávané varianty (typ profilu, průměry, rozteč vln).
+* **[3. Tlačítko]** Klikněte na velké modré tlačítko **🚀 SPOČÍTAT A GENEROVAT GRAF**.
+* **[4. Vyhodnocení]** Zkontrolujte průběh křivek v grafu a procentuální srovnání v tabulce pod grafem.
+
+---
+
+### 3. ⚙️ Detailní popis parametrů a vstupů
+
+**A. Parametry média a trasy (Levý panel)**
+
+| Parametr | Jednotka | Výchozí hodnota | Popis |
+| :--- | :--- | :--- | :--- |
+| **Název kapaliny** | text | G12+ Specifikace | Identifikační název kapaliny (zobrazí se v záhlaví grafu). |
+| **Teplota měření** | °C | 22.0 | Teplota, pro kterou platí zadané fyzikální vlastnosti. |
+| **Hustota** | kg/m³ / g/cm³ | 1060.0 kg/m³ | Hustota média. Lze přepínat mezi kg/m³ a g/cm³. |
+| **Viskozita** | Pa·s | 0.0030 | Dynamická viskozita kapaliny (např. voda $\\approx 0.001$, chladicí směsi vyšší). |
+| **Délka trasy** | mm | 500.0 | Celková délka potrubí/hadice v milimetrech. |
+| **Max. sledovaný průtok** | l/min | 25.0 | Horní mez osy průtoku v grafu (rozsah 0.5 až 100 l/min). |
+
+**B. Konfigurace variant (Hlavní okno)**
+
+| Pole | Možnosti / Formát | Popis |
+| :--- | :--- | :--- |
+| **Název/Poznámka** | text | Vlastní pojmenování varianty pro legendu grafu i tabulku. |
+| **Typ** | Hladká / Vlnitá | Výběr konstrukčního typu trubky. |
+| **Vnitřní Ø ($d_{min}$)** | mm | Světlost / vnitřní průměr (u vlnovce průměr ve spodní části vlny). |
+| **Maximální Ø ($d_{max}$)**| mm | Vnější/horní průměr vlny (vrchol profilu vlnovce – pouze pro vlnitou). |
+| **Rozteč ($p$)** | 3.1, 3.3, 3.7, 4.0, 4.65 mm | Osová vzdálenost mezi jednotlivými vlnami profilu. |
+
+> 💡 **Tip:** Pokud zvolíte typ *Hladká*, parametry vlnovce ($d_{max}$ a rozteč) se automaticky skryjí a nepoužijí.
+
+---
+
+### 4. 📊 Interpretace výstupů
+1. **Křivka tlakové ztráty (Graf):**
+   * **Osa X:** Objemový průtok [l/min].
+   * **Osa Y:** Celková tlaková ztráta [kPa].
+   * Každá varianta má svou barevnou křivku odpovídající názvu v legendě.
+2. **Porovnávací tabulka:**
+   * **Konfigurace:** Rychlý geometrický souhrn.
+   * **Ztráta [kPa]:** Vypočtená tlaková ztráta při maximálním zadaném průtoku.
+   * **Rozdíl k Var 1:** Procentuální nárůst či pokles odporu vztažený k Variantě 1 (Varianta 1 slouží jako referenční základna $0\,\%$).
+
+---
+
+### 5. 🔬 Stručně o fyzikálním pozadí výpočtu
+* **Laminární / turbulentní režim:** Program automaticky počítá Reynoldsovo číslo ($Re$). Pro laminární proudění ($Re < 2300$) používá vztah $\\lambda = \\frac{64}{Re}$, pro turbulentní proudění Blasiův vztah $\\lambda = \\frac{0.3164}{Re^{0.25}}$.
+* **Vliv vlnovce:** U vlnité trubky program aplikuje korekční faktor závislý na relativní výšce vlny $\\frac{d_{max} - d_{min}}{2 \\cdot d_{min}}$ a rozteči vln $p$, který zohledňuje zvýšené víření a odpor profilu.
+
+---
+
+### 6. ⚠️ Tipy a časté chyby
+* **Pozor na jednotky viskozity:** Hodnota se zadává v $\\text{Pa}\\cdot\\text{s}$ (nikoliv v $\\text{mPa}\\cdot\\text{s}$ ani $\\text{mm}^2/\\text{s}$). Pro vodu při 20 °C je to $0.0010\\,\\text{Pa}\\cdot\\text{s}$.
+* **Průměry vlnovce:** Maximální průměr $d_{max}$ musí být vždy větší než vnitřní průměr $d_{min}$.
+* **Varianta 1 jako reference:** Pro nejlepší přehlednost doporučujeme jako Variantu 1 nastavit základní hladkou trubku a vlnité profily konfigurovat jako Variantu 2 až 4.
+    """)
+
+# --- HLAVNÍ HLAVIČKA S TLAČÍTKEM NÁPOVĚDY ---
+title_col, help_col = st.columns([5, 1])
+with title_col:
+    st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
+with help_col:
+    st.write("") # Odsazení shora
+    if st.button("❓ Nápověda / Manuál", use_container_width=True):
+        show_manual()
+
 st.markdown("Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.")
 
 # --- SIDEBAR (LEVÝ SLOUPEC) ---
 with st.sidebar:
-    # 1. Logo FIP (zmenšené na 2/3 bez možnosti zvětšení)
+    # 1. Logo FIP (zmenšené bez možnosti fullscreenu)
     LOGO_FILE = "fip-logo-f-member-of-line-01-04.png"
     if os.path.exists(LOGO_FILE):
         logo_c1, logo_c2, logo_c3 = st.columns([1, 6, 1])
