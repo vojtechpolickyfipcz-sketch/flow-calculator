@@ -54,7 +54,7 @@ init_db()
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
-# Vlastní CSS: Šířka sidebaru a zákaz fullscreenu
+# Vlastní CSS: Šířka sidebaru, skrytí fullscreenu a styl tlačítek jazyků
 st.markdown(
     """
     <style>
@@ -68,20 +68,21 @@ st.markdown(
             visibility: hidden !important;
             pointer-events: none !important;
         }
+        /* Kompaktní styl tlačítek pro volbu jazyka */
+        div[data-testid="stHorizontalBlock"] button {
+            padding: 2px 6px !important;
+            font-size: 13px !important;
+        }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# --- JAZYKOVÉ SLOVNÍKY ---
-LANGUAGES = {
-    "🇨🇿 CZ": "cs",
-    "🇬🇧 EN": "en",
-    "🇩🇪 DE": "de",
-    "🇷🇴 RO": "ro",
-    "🇲🇽 ES": "es"
-}
+# Inicializace zvoleného jazyka v session_state
+if "current_lang" not in st.session_state:
+    st.session_state["current_lang"] = "cs"
 
+# --- JAZYKOVÉ SLOVNÍKY ---
 TRANSLATIONS = {
     "cs": {
         "title": "📊 Kalkulátor tlakových ztrát: Hladká vs. Vlnitá trubka",
@@ -365,20 +366,32 @@ Herramienta interactiva para calcular y comparar pérdidas de presión ($\\Delta
 def show_manual(lang_code):
     st.markdown(TRANSLATIONS[lang_code]["manual_body"])
 
-# --- HLAVNÍ HLAVIČKA S PŘEPÍNAČEM JAZYKŮ NAD TLAČÍTKEM NÁPOVĚDY ---
-top_left, top_right = st.columns([4.5, 1.5])
+# --- HLAVIČKA: TITULEK VLEVO, VOLBA JAZYKŮ A NÁPOVĚDA VPRAVO ---
+top_left, top_right = st.columns([4.2, 1.8])
 
 with top_right:
-    # 1. Kompaktní výběr jazyka s vlaječkami
-    selected_lang_label = st.selectbox(
-        "Jazyk",
-        options=list(LANGUAGES.keys()),
-        label_visibility="collapsed"
-    )
-    lang = LANGUAGES[selected_lang_label]
+    # Řádek tlačítek s vlaječkami
+    f_cols = st.columns(5)
+    flags = [
+        ("🇨🇿", "CZ", "cs"),
+        ("🇬🇧", "EN", "en"),
+        ("🇩🇪", "DE", "de"),
+        ("🇷🇴", "RO", "ro"),
+        ("🇲🇽", "ES", "es")
+    ]
+    
+    for idx, (emoji, code_label, lang_id) in enumerate(flags):
+        with f_cols[idx]:
+            # Zvýraznění aktivního jazyka
+            btn_type = "primary" if st.session_state["current_lang"] == lang_id else "secondary"
+            if st.button(f"{emoji} {code_label}", key=f"btn_lang_{lang_id}", type=btn_type, use_container_width=True):
+                st.session_state["current_lang"] = lang_id
+                st.rerun()
+
+    lang = st.session_state["current_lang"]
     t = TRANSLATIONS[lang]
 
-    # 2. Tlačítko nápovědy přímo pod jazykem
+    # Tlačítko nápovědy přímo pod vlaječkami
     if st.button(t["btn_manual"], use_container_width=True):
         show_manual(lang)
 
