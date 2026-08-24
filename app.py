@@ -1,4 +1,4 @@
-import streamlit as st
+app_code = '''import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -9,21 +9,19 @@ from datetime import datetime
 DB_FILE = "analytics.db"
 
 def init_db():
-    """Vytvoří tabulku pro logování kliknutí, pokud ještě neexistuje."""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute('''
+    c.execute("""
         CREATE TABLE IF NOT EXISTS calculations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             month_year TEXT
         )
-    ''')
+    """)
     conn.commit()
     conn.close()
 
 def log_calculation():
-    """Zaznamená jedno provedení kalkulace s aktuálním časem a rokem-měsícem (YYYY-MM)."""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     now = datetime.now()
@@ -33,13 +31,9 @@ def log_calculation():
     conn.close()
 
 def get_stats():
-    """Vrátí celkový počet, počet za aktuální měsíc a rozpad podle jednotlivých měsíců."""
     conn = sqlite3.connect(DB_FILE)
-    
-    # Celkový počet
     total_count = pd.read_sql_query("SELECT COUNT(*) as count FROM calculations", conn).iloc[0]["count"]
     
-    # Aktuální měsíc
     current_month_str = datetime.now().strftime("%Y-%m")
     curr_month_count = pd.read_sql_query(
         "SELECT COUNT(*) as count FROM calculations WHERE month_year = ?", 
@@ -47,7 +41,6 @@ def get_stats():
         params=(current_month_str,)
     ).iloc[0]["count"]
     
-    # Rozpad podle měsíců
     monthly_df = pd.read_sql_query(
         "SELECT month_year as 'Měsíc', COUNT(*) as 'Počet analýz' FROM calculations GROUP BY month_year ORDER BY month_year DESC", 
         conn
@@ -55,34 +48,23 @@ def get_stats():
     conn.close()
     return total_count, curr_month_count, monthly_df
 
-# Inicializace databáze při spuštění aplikace
 init_db()
 
-# Nastavení vzhledu stránky
+# --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
-st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
+# --- HLAVIČKA S LOGEM FIP ---
+header_col1, header_col2 = st.columns([1, 6])
+with header_col1:
+    # Pokud máte lokální soubor např. 'logo_fip.png', můžete použít: st.image("logo_fip.png", width=120)
+    st.markdown("### 🏢 **FIP**")
+with header_col2:
+    st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
+
 st.markdown("Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.")
 
-# --- SIDEBAR: SPOLEČNÉ PARAMETRY A POČÍTADLA ---
+# --- SIDEBAR: SPOLEČNÉ PARAMETRY ---
 with st.sidebar:
-    st.header("📈 Využití kalkulátoru")
-    total_c, curr_m_c, monthly_data = get_stats()
-    
-    col_m1, col_m2 = st.columns(2)
-    with col_m1:
-        st.metric(label="Tento měsíc", value=curr_m_c)
-    with col_m2:
-        st.metric(label="Celkem spuštěno", value=total_c)
-        
-    with st.expander("📅 Přehled po měsících"):
-        if not monthly_data.empty:
-            st.dataframe(monthly_data, use_container_width=True, hide_index=True)
-        else:
-            st.caption("Zatím nebyly provedeny žádné výpočty.")
-    
-    st.divider()
-
     st.header("💧 Parametry média")
     fluid_name = st.text_input("Název kapaliny", "G12+ Specifikace")
     temp = st.number_input("Teplota měření [°C]", value=22.0, step=0.1)
@@ -144,7 +126,6 @@ def calculate_dp(v_cfg, flow_list):
 
 # --- VÝSTUPY ---
 if st.button("🚀 SPOČÍTAT A GENEROVAT GRAF", use_container_width=True):
-    # Zaznamenání generování do databáze
     log_calculation()
     
     flow_axis = np.linspace(0.1, flow_max, 100)
@@ -175,3 +156,35 @@ if st.button("🚀 SPOČÍTAT A GENEROVAT GRAF", use_container_width=True):
     df["Ztráta [kPa]"] = df["Ztráta [kPa]"].map('{:.3f}'.format)
     df["Rozdíl k Var 1"] = df["Ztráta [kPa]"].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
     st.table(df)
+
+# --- STATISTIKY / POČÍTADLA VYUŽITÍ (AŽ NA KONCI STRÁNKY VPRAVO) ---
+st.write("---")
+col_space, col_stats = st.columns([2, 1])
+
+with col_stats:
+    st.markdown("#### 📈 Využití kalkulátoru")
+    total_c, curr_m_c, monthly_data = get_stats()
+    
+    stat_c1, stat_c2 = st.columns(2)
+    with stat_c1:
+        st.metric(label="Tento měsíc", value=curr_m_c)
+    with stat_c2:
+        st.metric(label="Celkem", value=total_c)
+        
+    with st.expander("📅 Přehled po měsících"):
+        if not monthly_data.empty:
+            st.dataframe(monthly_data, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Zatím nebyly provedeny žádné výpočty.")
+'''
+
+# Uložení a stažení
+with open("app.py", "w", encoding="utf-8") as f:
+    f.write(app_code)
+
+with open("requirements.txt", "w", encoding="utf-8") as f:
+    f.write("streamlit\nnumpy\nmatplotlib\npandas\n")
+
+from google.colab import files
+files.download("app.py")
+files.download("requirements.txt")
