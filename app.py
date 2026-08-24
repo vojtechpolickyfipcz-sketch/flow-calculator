@@ -54,13 +54,20 @@ init_db()
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
-# Vlastní CSS: Zvětšení šířky sidebaru o ~20%
+# Vlastní CSS: Šířka sidebaru a zákaz zvětšovacího tlačítka u obrázků
 st.markdown(
     """
     <style>
         [data-testid="stSidebar"] {
             min-width: 405px;
             max-width: 405px;
+        }
+        /* Skrytí tlačítka pro zvětšení obrázku (fullscreen) */
+        button[title="View fullscreen"],
+        [data-testid="StyledFullScreenButton"] {
+            display: none !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
         }
     </style>
     """,
@@ -73,10 +80,12 @@ st.markdown("Nástroj pro porovnání tlakových ztrát s možností vlastního 
 
 # --- SIDEBAR (LEVÝ SLOUPEC) ---
 with st.sidebar:
-    # 1. Logo FIP na začátku levého sloupce
+    # 1. Logo FIP (zmenšené na 2/3 bez možnosti zvětšení)
     LOGO_FILE = "fip-logo-f-member-of-line-01-04.png"
     if os.path.exists(LOGO_FILE):
-        st.image(LOGO_FILE, use_container_width=True)
+        logo_c1, logo_c2, logo_c3 = st.columns([1, 6, 1])
+        with logo_c2:
+            st.image(LOGO_FILE, width=220)
     else:
         st.markdown("### 🏢 **FIP**")
     
