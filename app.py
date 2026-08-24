@@ -54,23 +54,22 @@ init_db()
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
-# --- HLAVIČKA S LOGEM FIP ---
-LOGO_FILE = "fip-logo-f-member-of-line-01-04.png"
-header_col1, header_col2 = st.columns([1.5, 6])
+# --- HLAVNÍ HLAVIČKA ---
+st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
+st.markdown("Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.")
 
-with header_col1:
+# --- SIDEBAR (LEVÝ SLOUPEC) ---
+with st.sidebar:
+    # 1. Logo FIP na začátku levého sloupce
+    LOGO_FILE = "fip-logo-f-member-of-line-01-04.png"
     if os.path.exists(LOGO_FILE):
         st.image(LOGO_FILE, use_container_width=True)
     else:
         st.markdown("### 🏢 **FIP**")
+    
+    st.divider()
 
-with header_col2:
-    st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
-
-st.markdown("Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.")
-
-# --- SIDEBAR: SPOLEČNÉ PARAMETRY ---
-with st.sidebar:
+    # 2. Parametry média
     st.header("💧 Parametry média")
     fluid_name = st.text_input("Název kapaliny", "G12+ Specifikace")
     temp = st.number_input("Teplota měření [°C]", value=22.0, step=0.1)
@@ -83,9 +82,28 @@ with st.sidebar:
     
     visc = st.number_input("Viskozita [Pa·s]", value=0.0030, format="%.4f", step=0.0001)
     
+    # 3. Společná geometrie
     st.header("📏 Společná geometrie")
     length = st.number_input("Délka trasy [mm]", value=500.0, step=0.01)
     flow_max = st.slider("Maximální sledovaný průtok [l/min]", 0.5, 100.0, 25.0, 0.5)
+
+    st.divider()
+
+    # 4. Počítadlo využití kalkulátoru
+    st.header("📈 Využití kalkulátoru")
+    total_c, curr_m_c, monthly_data = get_stats()
+    
+    stat_c1, stat_c2 = st.columns(2)
+    with stat_c1:
+        st.metric(label="Tento měsíc", value=curr_m_c)
+    with stat_c2:
+        st.metric(label="Celkem", value=total_c)
+        
+    with st.expander("📅 Přehled po měsících"):
+        if not monthly_data.empty:
+            st.dataframe(monthly_data, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Zatím nebyly provedeny žádné výpočty.")
 
 final_density = dens_val * 1000 if dens_unit == "g/cm³" else dens_val
 
@@ -162,26 +180,6 @@ if st.button("🚀 SPOČÍTAT A GENEROVAT GRAF", use_container_width=True):
     df["Ztráta [kPa]"] = df["Ztráta [kPa]"].map('{:.3f}'.format)
     df["Rozdíl k Var 1"] = df["Ztráta [kPa]"].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
     st.table(df)
-
-# --- STATISTIKY / POČÍTADLA VYUŽITÍ (AŽ NA KONCI STRÁNKY VPRAVO) ---
-st.write("---")
-col_space, col_stats = st.columns([2, 1])
-
-with col_stats:
-    st.markdown("#### 📈 Využití kalkulátoru")
-    total_c, curr_m_c, monthly_data = get_stats()
-    
-    stat_c1, stat_c2 = st.columns(2)
-    with stat_c1:
-        st.metric(label="Tento měsíc", value=curr_m_c)
-    with stat_c2:
-        st.metric(label="Celkem", value=total_c)
-        
-    with st.expander("📅 Přehled po měsících"):
-        if not monthly_data.empty:
-            st.dataframe(monthly_data, use_container_width=True, hide_index=True)
-        else:
-            st.caption("Zatím nebyly provedeny žádné výpočty.")
 '''
 
 with open("app.py", "w", encoding="utf-8") as f:
