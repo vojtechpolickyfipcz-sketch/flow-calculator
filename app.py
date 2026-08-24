@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import sqlite3
+import os
 from datetime import datetime
 
 # --- DATABÁZE PRO STATISTIKY POUŽITÍ ---
@@ -54,10 +55,15 @@ init_db()
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
 # --- HLAVIČKA S LOGEM FIP ---
-header_col1, header_col2 = st.columns([1, 6])
+LOGO_FILE = "fip-logo-f-member-of-line-01-04.png"
+header_col1, header_col2 = st.columns([1.5, 6])
+
 with header_col1:
-    # Pokud máte lokální soubor např. 'logo_fip.png', můžete použít: st.image("logo_fip.png", width=120)
-    st.markdown("### 🏢 **FIP**")
+    if os.path.exists(LOGO_FILE):
+        st.image(LOGO_FILE, use_container_width=True)
+    else:
+        st.markdown("### 🏢 **FIP**")
+
 with header_col2:
     st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
 
@@ -178,7 +184,6 @@ with col_stats:
             st.caption("Zatím nebyly provedeny žádné výpočty.")
 '''
 
-# Uložení a stažení
 with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
