@@ -86,7 +86,7 @@ if "current_lang" not in st.session_state:
 TRANSLATIONS = {
     "cs": {
         "title": "📊 Kalkulátor tlakových ztrát: Hladká vs. Vlnitá trubka",
-        "subtitle": "Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.",
+        "subtitle": "Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát (Δp) při proudění kapalin v potrubí. Umožňuje přímo porovnat chování hladkých trubek a trubek s vlnovcovým profilem.",
         "btn_manual": "❓ Nápověda / Manuál",
         "param_media": "💧 Parametry média",
         "fluid_name": "Název kapaliny",
