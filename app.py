@@ -73,89 +73,339 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- DIALOGOVÉ OKNO PRO NÁPOVĚDU ---
-@st.dialog("📖 Uživatelský manuál: Hydraulický Srovnávač", width="large")
-def show_manual():
-    st.markdown("""
+# --- JAZYKOVÉ SLOVNÍKY ---
+LANGUAGES = {
+    "🇨🇿 Čeština": "cs",
+    "🇬🇧 English": "en",
+    "🇩🇪 Deutsch": "de",
+    "🇷🇴 Română": "ro",
+    "🇲🇽 Español (México)": "es"
+}
+
+TRANSLATIONS = {
+    "cs": {
+        "title": "📊 Kalkulátor tlakových ztrát: Hladká vs. Vlnitá trubka",
+        "subtitle": "Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.",
+        "btn_manual": "❓ Nápověda / Manuál",
+        "param_media": "💧 Parametry média",
+        "fluid_name": "Název kapaliny",
+        "temp": "Teplota měření [°C]",
+        "density": "Hustota",
+        "density_unit": "Jednotka",
+        "viscosity": "Viskozita [Pa·s]",
+        "geom_header": "📏 Společná geometrie",
+        "length": "Délka trasy [mm]",
+        "flow_max": "Maximální sledovaný průtok [l/min]",
+        "usage_header": "📈 Využití kalkulátoru",
+        "this_month": "Tento měsíc",
+        "total_calc": "Celkem",
+        "monthly_overview": "📅 Přehled po měsících",
+        "no_calc": "Zatím nebyly provedeny žádné výpočty.",
+        "col_month": "Měsíc",
+        "col_count": "Počet analýz",
+        "var_header": "Konfigurace variant",
+        "var_title": "Varianta",
+        "var_name": "Název/Poznámka",
+        "var_name_help": "Pojmenujte variantu pro legendu grafu (např. NW12 Sinus)",
+        "var_type": "Typ",
+        "type_smooth": "Hladká",
+        "type_corrugated": "Vlnitá",
+        "d_min": "Vnitřní Ø [mm]",
+        "d_max": "Maximální Ø [mm]",
+        "pitch": "Rozteč [mm]",
+        "smooth_note": "Parametry vlnovce nejsou vyžadovány.",
+        "calc_btn": "🚀 SPOČÍTAT A GENEROVAT GRAF",
+        "graph_flow": "Průtok [l/min]",
+        "graph_dp": "Tlaková ztráta [kPa]",
+        "res_name": "Název",
+        "res_type": "Typ",
+        "res_cfg": "Konfigurace",
+        "res_loss": "Ztráta [kPa]",
+        "res_diff": "Rozdíl k Var 1",
+        "manual_title": "📖 Uživatelský manuál: Hydraulický Srovnávač",
+        "manual_body": """
 ### 1. 🎯 Úvod a k čemu aplikace slouží
-Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát ($\\Delta p$) při proudění kapalin v potrubí.
-Umožňuje přímo porovnat chování hladkých trubek a trubek s vlnovcovým profilem (vlnitých). Aplikace vizualizuje, jaký hydraulický odpor vytváří vlnění trubky v závislosti na zvoleném průtoku, geometrii profilu a vlastnostech proudícího média.
+Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát ($\\Delta p$) při proudění kapalin v potrubí. Umožňuje přímo porovnat chování hladkých trubek a trubek s vlnovcovým profilem.
 
 ---
 
-### 2. ⚡ Rychlý postup práce (Krok za krokem)
+### 2. ⚡ Rychlý postup práce
 * **[1. Levý panel]** Zadejte vlastnosti kapaliny (hustota, viskozita, teplota) a společnou délku trasy.
 * **[2. Hlavní plocha]** Nakonfigurujte až 4 porovnávané varianty (typ profilu, průměry, rozteč vln).
-* **[3. Tlačítko]** Klikněte na velké modré tlačítko **🚀 SPOČÍTAT A GENEROVAT GRAF**.
-* **[4. Vyhodnocení]** Zkontrolujte průběh křivek v grafu a procentuální srovnání v tabulce pod grafem.
+* **[3. Tlačítko]** Klikněte na velké tlačítko **🚀 SPOČÍTAT A GENEROVAT GRAF**.
+* **[4. Vyhodnocení]** Zkontrolujte průběh křivek v grafu a procentuální srovnání v tabulce.
 
 ---
 
 ### 3. ⚙️ Detailní popis parametrů a vstupů
-
-**A. Parametry média a trasy (Levý panel)**
-
-| Parametr | Jednotka | Výchozí hodnota | Popis |
-| :--- | :--- | :--- | :--- |
-| **Název kapaliny** | text | G12+ Specifikace | Identifikační název kapaliny (zobrazí se v záhlaví grafu). |
-| **Teplota měření** | °C | 22.0 | Teplota, pro kterou platí zadané fyzikální vlastnosti. |
-| **Hustota** | kg/m³ / g/cm³ | 1060.0 kg/m³ | Hustota média. Lze přepínat mezi kg/m³ a g/cm³. |
-| **Viskozita** | Pa·s | 0.0030 | Dynamická viskozita kapaliny (např. voda $\\approx 0.001$, chladicí směsi vyšší). |
-| **Délka trasy** | mm | 500.0 | Celková délka potrubí/hadice v milimetrech. |
-| **Max. sledovaný průtok** | l/min | 25.0 | Horní mez osy průtoku v grafu (rozsah 0.5 až 100 l/min). |
-
-**B. Konfigurace variant (Hlavní okno)**
-
-| Pole | Možnosti / Formát | Popis |
-| :--- | :--- | :--- |
-| **Název/Poznámka** | text | Vlastní pojmenování varianty pro legendu grafu i tabulku. |
-| **Typ** | Hladká / Vlnitá | Výběr konstrukčního typu trubky. |
-| **Vnitřní Ø ($d_{min}$)** | mm | Světlost / vnitřní průměr (u vlnovce průměr ve spodní části vlny). |
-| **Maximální Ø ($d_{max}$)**| mm | Vnější/horní průměr vlny (vrchol profilu vlnovce – pouze pro vlnitou). |
-| **Rozteč ($p$)** | 3.1, 3.3, 3.7, 4.0, 4.65 mm | Osová vzdálenost mezi jednotlivými vlnami profilu. |
-
-> 💡 **Tip:** Pokud zvolíte typ *Hladká*, parametry vlnovce ($d_{max}$ a rozteč) se automaticky skryjí a nepoužijí.
+* **Název kapaliny:** Identifikační název kapaliny v záhlaví grafu.
+* **Viskozita [Pa·s]:** Dynamická viskozita kapaliny (voda $\\approx 0.0010$, chladicí směsi vyšší).
+* **Vnitřní Ø ($d_{min}$):** Světlost / vnitřní průměr (u vlnovce vnitřní pata profilu).
+* **Maximální Ø ($d_{max}$):** Vnější průměr vlny (vrchol profilu vlnovce).
+* **Rozteč ($p$):** Osová vzdálenost mezi jednotlivými vlnami profilu.
 
 ---
 
 ### 4. 📊 Interpretace výstupů
-1. **Křivka tlakové ztráty (Graf):**
-   * **Osa X:** Objemový průtok [l/min].
-   * **Osa Y:** Celková tlaková ztráta [kPa].
-   * Každá varianta má svou barevnou křivku odpovídající názvu v legendě.
-2. **Porovnávací tabulka:**
-   * **Konfigurace:** Rychlý geometrický souhrn.
-   * **Ztráta [kPa]:** Vypočtená tlaková ztráta při maximálním zadaném průtoku.
-   * **Rozdíl k Var 1:** Procentuální nárůst či pokles odporu vztažený k Variantě 1 (Varianta 1 slouží jako referenční základna $0\,\%$).
+* **Graf tlakové ztráty:** Znázorňuje závislost tlakového odporu [kPa] na průtoku [l/min].
+* **Porovnávací tabulka:** Nabízí přesné hodnoty při maximálním průtoku a procentuální rozdíl vztažený k Variantě 1.
+        """
+    },
+    "en": {
+        "title": "📊 Pressure Drop Calculator: Smooth vs. Corrugated Tube",
+        "subtitle": "Tool for comparing pressure drops with custom variant naming. The goal is to evaluate the impact of corrugated profiles and increased resistance.",
+        "btn_manual": "❓ Help / Manual",
+        "param_media": "💧 Fluid Parameters",
+        "fluid_name": "Fluid Name",
+        "temp": "Measuring Temp [°C]",
+        "density": "Density",
+        "density_unit": "Unit",
+        "viscosity": "Viscosity [Pa·s]",
+        "geom_header": "📏 Common Geometry",
+        "length": "Tube Length [mm]",
+        "flow_max": "Max Monitored Flow [l/min]",
+        "usage_header": "📈 Calculator Usage",
+        "this_month": "This Month",
+        "total_calc": "Total",
+        "monthly_overview": "📅 Monthly Overview",
+        "no_calc": "No calculations performed yet.",
+        "col_month": "Month",
+        "col_count": "Analyses Count",
+        "var_header": "Variant Configuration",
+        "var_title": "Variant",
+        "var_name": "Name/Note",
+        "var_name_help": "Name the variant for the chart legend (e.g., NW12 Sinus)",
+        "var_type": "Type",
+        "type_smooth": "Smooth",
+        "type_corrugated": "Corrugated",
+        "d_min": "Inner Ø [mm]",
+        "d_max": "Max Ø [mm]",
+        "pitch": "Pitch [mm]",
+        "smooth_note": "Corrugation parameters not required.",
+        "calc_btn": "🚀 CALCULATE AND GENERATE CHART",
+        "graph_flow": "Flow Rate [l/min]",
+        "graph_dp": "Pressure Drop [kPa]",
+        "res_name": "Name",
+        "res_type": "Type",
+        "res_cfg": "Configuration",
+        "res_loss": "Loss [kPa]",
+        "res_diff": "Diff to Var 1",
+        "manual_title": "📖 User Manual: Hydraulic Comparator",
+        "manual_body": """
+### 1. 🎯 Purpose and Overview
+The Hydraulic Comparator is an interactive web tool for quick calculation and comparison of pressure drops ($\\Delta p$) in fluid piping. It allows direct comparison between smooth tubes and corrugated profiles.
 
 ---
 
-### 5. 🔬 Stručně o fyzikálním pozadí výpočtu
-* **Laminární / turbulentní režim:** Program automaticky počítá Reynoldsovo číslo ($Re$). Pro laminární proudění ($Re < 2300$) používá vztah $\\lambda = \\frac{64}{Re}$, pro turbulentní proudění Blasiův vztah $\\lambda = \\frac{0.3164}{Re^{0.25}}$.
-* **Vliv vlnovce:** U vlnité trubky program aplikuje korekční faktor závislý na relativní výšce vlny $\\frac{d_{max} - d_{min}}{2 \\cdot d_{min}}$ a rozteči vln $p$, který zohledňuje zvýšené víření a odpor profilu.
+### 2. ⚡ Quick Workflow
+* **[1. Sidebar]** Enter fluid properties (density, viscosity, temperature) and total tube length.
+* **[2. Main Screen]** Configure up to 4 comparison variants (type, diameters, pitch).
+* **[3. Button]** Click the **🚀 CALCULATE AND GENERATE CHART** button.
+* **[4. Evaluation]** Review curves in the graph and the summary table.
 
 ---
 
-### 6. ⚠️ Tipy a časté chyby
-* **Pozor na jednotky viskozity:** Hodnota se zadává v $\\text{Pa}\\cdot\\text{s}$ (nikoliv v $\\text{mPa}\\cdot\\text{s}$ ani $\\text{mm}^2/\\text{s}$). Pro vodu při 20 °C je to $0.0010\\,\\text{Pa}\\cdot\\text{s}$.
-* **Průměry vlnovce:** Maximální průměr $d_{max}$ musí být vždy větší než vnitřní průměr $d_{min}$.
-* **Varianta 1 jako reference:** Pro nejlepší přehlednost doporučujeme jako Variantu 1 nastavit základní hladkou trubku a vlnité profily konfigurovat jako Variantu 2 až 4.
-    """)
+### 3. ⚙️ Parameters Description
+* **Fluid Name:** Identifier displayed in the chart title.
+* **Viscosity [Pa·s]:** Dynamic viscosity (water $\\approx 0.0010$, coolants higher).
+* **Inner Ø ($d_{min}$):** Inner nominal diameter.
+* **Max Ø ($d_{max}$):** Outer peak diameter for corrugated profile.
+* **Pitch ($p$):** Distance between consecutive corrugation crests.
 
-# --- HLAVNÍ HLAVIČKA S TLAČÍTKEM NÁPOVĚDY ---
-title_col, help_col = st.columns([5, 1])
-with title_col:
-    st.title("📊 Pressure drop calculator: Hladká vs. Vlnitá trubka")
-with help_col:
-    st.write("") # Odsazení shora
-    if st.button("❓ Nápověda / Manuál", use_container_width=True):
-        show_manual()
+---
 
-st.markdown("Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.")
+### 4. 📊 Output Interpretation
+* **Chart:** Displays pressure drop [kPa] as a function of flow rate [l/min].
+* **Summary Table:** Shows exact values at maximum flow rate and percentage difference relative to Variant 1.
+        """
+    },
+    "de": {
+        "title": "📊 Druckverlust-Rechner: Glattrohr vs. Wellrohr",
+        "subtitle": "Werkzeug zum Vergleichen von Druckverlusten mit individueller Variantenbenennung.",
+        "btn_manual": "❓ Hilfe / Handbuch",
+        "param_media": "💧 Medienparameter",
+        "fluid_name": "Name des Mediums",
+        "temp": "Messtemperatur [°C]",
+        "density": "Dichte",
+        "density_unit": "Einheit",
+        "viscosity": "Viskosität [Pa·s]",
+        "geom_header": "📏 Gemeinsame Geometrie",
+        "length": "Leitungslänge [mm]",
+        "flow_max": "Max. Durchfluss [l/min]",
+        "usage_header": "📈 Rechner-Nutzung",
+        "this_month": "Diesen Monat",
+        "total_calc": "Gesamt",
+        "monthly_overview": "📅 Monatsübersicht",
+        "no_calc": "Bisher keine Berechnungen durchgeführt.",
+        "col_month": "Monat",
+        "col_count": "Anzahl Analysen",
+        "var_header": "Variantenkonfiguration",
+        "var_title": "Variante",
+        "var_name": "Name/Notiz",
+        "var_name_help": "Benennen Sie die Variante für die Diagrammlegende",
+        "var_type": "Typ",
+        "type_smooth": "Glatt",
+        "type_corrugated": "Gewellt",
+        "d_min": "Innen-Ø [mm]",
+        "d_max": "Maximaler Ø [mm]",
+        "pitch": "Teilung [mm]",
+        "smooth_note": "Wellrohrparameter nicht erforderlich.",
+        "calc_btn": "🚀 BERECHNEN UND DIAGRAMM ERSTELLEN",
+        "graph_flow": "Durchfluss [l/min]",
+        "graph_dp": "Druckverlust [kPa]",
+        "res_name": "Name",
+        "res_type": "Typ",
+        "res_cfg": "Konfiguration",
+        "res_loss": "Verlust [kPa]",
+        "res_diff": "Diff. zu Var 1",
+        "manual_title": "📖 Benutzerhandbuch: Hydraulischer Vergleicher",
+        "manual_body": """
+### 1. 🎯 Einführung
+Interaktives Werkzeug zur schnellen Berechnung und zum Vergleich von Druckverlusten ($\\Delta p$) in Rohrleitungen zwischen glatten und gewellten Profilen.
+
+---
+
+### 2. ⚡ Kurzanleitung
+* **[1. Seitenleiste]** Mediendaten (Dichte, Viskosität, Temperatur) und Rohrlänge eingeben.
+* **[2. Hauptbereich]** Bis zu 4 Varianten konfigurieren.
+* **[3. Ausführen]** Auf **🚀 BERECHNEN** klicken.
+* **[4. Ergebnis]** Diagramm und Vergleichstabelle auswerten.
+        """
+    },
+    "ro": {
+        "title": "📊 Calculator Cădere de Presiune: Tub Neted vs. Ondulat",
+        "subtitle": "Instrument pentru compararea căderilor de presiune cu denumirea personalizată a variantelor.",
+        "btn_manual": "❓ Ajutor / Manual",
+        "param_media": "💧 Parametri Fluid",
+        "fluid_name": "Nume Fluid",
+        "temp": "Temp. Măsurare [°C]",
+        "density": "Densitate",
+        "density_unit": "Unitate",
+        "viscosity": "Vâscozitate [Pa·s]",
+        "geom_header": "📏 Geometrie Comună",
+        "length": "Lungime Traseu [mm]",
+        "flow_max": "Debit Maxim Urmărit [l/min]",
+        "usage_header": "📈 Utilizare Calculator",
+        "this_month": "Luna Aceasta",
+        "total_calc": "Total",
+        "monthly_overview": "📅 Prezentare Lunară",
+        "no_calc": "Nu au fost efectuate calcule încă.",
+        "col_month": "Lună",
+        "col_count": "Număr Analize",
+        "var_header": "Configurare Variante",
+        "var_title": "Varianta",
+        "var_name": "Nume/Notă",
+        "var_name_help": "Denumiți varianta pentru legenda graficului",
+        "var_type": "Tip",
+        "type_smooth": "Neted",
+        "type_corrugated": "Ondulat",
+        "d_min": "Ø Interior [mm]",
+        "d_max": "Ø Maxim [mm]",
+        "pitch": "Pas Ondulație [mm]",
+        "smooth_note": "Parametrii de ondulare nu sunt necesari.",
+        "calc_btn": "🚀 CALCULEAZĂ ȘI GENEREAZĂ GRAFIC",
+        "graph_flow": "Debit [l/min]",
+        "graph_dp": "Cădere de Presiune [kPa]",
+        "res_name": "Nume",
+        "res_type": "Tip",
+        "res_cfg": "Configurație",
+        "res_loss": "Pierdere [kPa]",
+        "res_diff": "Dif. față de Var 1",
+        "manual_title": "📖 Manual de Utilizare: Comparator Hidraulic",
+        "manual_body": """
+### 1. 🎯 Scop și Utilizare
+Instrument interactiv pentru calculul rapid și compararea căderilor de presiune ($\\Delta p$) în conducte între profiluri netede și ondulate.
+
+---
+
+### 2. ⚡ Pași de Lucru
+* **[1. Panou Stânga]** Introduceți proprietățile fluidului și lungimea conductei.
+* **[2. Ecran Principal]** Configurați până la 4 variante.
+* **[3. Buton]** Apăsați pe **🚀 CALCULEAZĂ**.
+* **[4. Evaluare]** Vizualizați graficul și tabelul rezumat.
+        """
+    },
+    "es": {
+        "title": "📊 Calculadora de Caída de Presión: Tubo Liso vs. Corrugado",
+        "subtitle": "Herramienta para comparar pérdidas de presión con personalización de nombres de variantes.",
+        "btn_manual": "❓ Ayuda / Manual",
+        "param_media": "💧 Parámetros del Fluido",
+        "fluid_name": "Nombre del Fluido",
+        "temp": "Temp. de Medición [°C]",
+        "density": "Densidad",
+        "density_unit": "Unidad",
+        "viscosity": "Viscosidad [Pa·s]",
+        "geom_header": "📏 Geometría Común",
+        "length": "Longitud de Tubería [mm]",
+        "flow_max": "Flujo Máximo [l/min]",
+        "usage_header": "📈 Uso de la Calculadora",
+        "this_month": "Este Mes",
+        "total_calc": "Total",
+        "monthly_overview": "📅 Resumen Mensual",
+        "no_calc": "Aún no se han realizado cálculos.",
+        "col_month": "Mes",
+        "col_count": "Cantidad de Análisis",
+        "var_header": "Configuración de Variantes",
+        "var_title": "Variante",
+        "var_name": "Nombre/Nota",
+        "var_name_help": "Nombre de la variante para la leyenda del gráfico",
+        "var_type": "Tipo",
+        "type_smooth": "Liso",
+        "type_corrugated": "Corrugado",
+        "d_min": "Ø Interior [mm]",
+        "d_max": "Ø Máximo [mm]",
+        "pitch": "Paso [mm]",
+        "smooth_note": "No se requieren parámetros de corrugación.",
+        "calc_btn": "🚀 CALCULAR Y GENERAR GRÁFICA",
+        "graph_flow": "Flujo [l/min]",
+        "graph_dp": "Caída de Presión [kPa]",
+        "res_name": "Nombre",
+        "res_type": "Tipo",
+        "res_cfg": "Configuración",
+        "res_loss": "Pérdida [kPa]",
+        "res_diff": "Dif. vs Var 1",
+        "manual_title": "📖 Manual de Usuario: Comparador Hidráulico",
+        "manual_body": """
+### 1. 🎯 Introducción
+Herramienta interactiva para calcular y comparar pérdidas de presión ($\\Delta p$) en tuberías entre perfiles lisos y corrugados.
+
+---
+
+### 2. ⚡ Flujo de Trabajo
+* **[1. Panel Lateral]** Ingrese las propiedades del fluido y la longitud total.
+* **[2. Pantalla Principal]** Configure hasta 4 variantes independientes.
+* **[3. Botón]** Haga clic en **🚀 CALCULAR**.
+* **[4. Resultados]** Revise las curvas en la gráfica y la tabla resumen.
+        """
+    }
+}
+
+# --- DIALOGOVÉ OKNO PRO NÁPOVĚDU ---
+@st.dialog("Manual", width="large")
+def show_manual(lang_code):
+    st.markdown(TRANSLATIONS[lang_code]["manual_body"])
+
+# --- HLAVNÍ HLAVIČKA S PŘEPÍNAČEM JAZYKŮ A NÁPOVĚDOU ---
+top_col1, top_col2, top_col3 = st.columns([5, 2, 1.5])
+
+with top_col2:
+    selected_lang_label = st.selectbox("🌐 Jazyk / Language", list(LANGUAGES.keys()), label_visibility="collapsed")
+    lang = LANGUAGES[selected_lang_label]
+
+with top_col3:
+    if st.button(TRANSLATIONS[lang]["btn_manual"], use_container_width=True):
+        show_manual(lang)
+
+with top_col1:
+    st.title(TRANSLATIONS[lang]["title"])
+
+st.markdown(TRANSLATIONS[lang]["subtitle"])
+
+t = TRANSLATIONS[lang]
 
 # --- SIDEBAR (LEVÝ SLOUPEC) ---
 with st.sidebar:
-    # 1. Logo FIP (zmenšené bez možnosti fullscreenu)
+    # 1. Logo FIP (zmenšené bez fullscreenu)
     LOGO_FILE = "fip-logo-f-member-of-line-01-04.png"
     if os.path.exists(LOGO_FILE):
         logo_c1, logo_c2, logo_c3 = st.columns([1, 6, 1])
@@ -167,65 +417,70 @@ with st.sidebar:
     st.divider()
 
     # 2. Parametry média
-    st.header("💧 Parametry média")
-    fluid_name = st.text_input("Název kapaliny", "G12+ Specifikace")
-    temp = st.number_input("Teplota měření [°C]", value=22.0, step=0.1)
+    st.header(t["param_media"])
+    fluid_name = st.text_input(t["fluid_name"], "G12+ Specifikace")
+    temp = st.number_input(t["temp"], value=22.0, step=0.1)
     
     col_d1, col_d2 = st.columns([2, 1])
     with col_d1:
-        dens_val = st.number_input("Hustota", value=1060.0, step=0.1)
+        dens_val = st.number_input(t["density"], value=1060.0, step=0.1)
     with col_d2:
-        dens_unit = st.selectbox("Jednotka", ["kg/m³", "g/cm³"])
+        dens_unit = st.selectbox(t["density_unit"], ["kg/m³", "g/cm³"])
     
-    visc = st.number_input("Viskozita [Pa·s]", value=0.0030, format="%.4f", step=0.0001)
+    visc = st.number_input(t["viscosity"], value=0.0030, format="%.4f", step=0.0001)
     
     # 3. Společná geometrie
-    st.header("📏 Společná geometrie")
-    length = st.number_input("Délka trasy [mm]", value=500.0, step=0.01)
-    flow_max = st.slider("Maximální sledovaný průtok [l/min]", 0.5, 100.0, 25.0, 0.5)
+    st.header(t["geom_header"])
+    length = st.number_input(t["length"], value=500.0, step=0.01)
+    flow_max = st.slider(t["flow_max"], 0.5, 100.0, 25.0, 0.5)
 
     st.divider()
 
     # 4. Počítadlo využití kalkulátoru
-    st.header("📈 Využití kalkulátoru")
+    st.header(t["usage_header"])
     total_c, curr_m_c, monthly_data = get_stats()
     
     stat_c1, stat_c2 = st.columns(2)
     with stat_c1:
-        st.metric(label="Tento měsíc", value=curr_m_c)
+        st.metric(label=t["this_month"], value=curr_m_c)
     with stat_c2:
-        st.metric(label="Celkem", value=total_c)
+        st.metric(label=t["total_calc"], value=total_c)
         
-    with st.expander("📅 Přehled po měsících"):
+    with st.expander(t["monthly_overview"]):
         if not monthly_data.empty:
+            monthly_data.columns = [t["col_month"], t["col_count"]]
             st.dataframe(monthly_data, use_container_width=True, hide_index=True)
         else:
-            st.caption("Zatím nebyly provedeny žádné výpočty.")
+            st.caption(t["no_calc"])
 
 final_density = dens_val * 1000 if dens_unit == "g/cm³" else dens_val
 
 # --- HLAVNÍ ČÁST: 4 VARIANTY ---
-st.subheader("Konfigurace variant")
+st.subheader(t["var_header"])
 cols = st.columns(4)
 variants = []
 
 for i in range(4):
     with cols[i]:
-        st.info(f"Varianta {i+1}")
-        v_label = st.text_input(f"Název/Poznámka", value=f"Varianta {i+1}", key=f"lab{i}", help="Pojmenujte variantu pro legendu grafu (např. NW12 Sinus)")
-        v_type = st.selectbox(f"Typ", ["Hladká", "Vlnitá"], index=(1 if i > 0 else 0), key=f"t{i}")
-        d_min = st.number_input(f"Vnitřní Ø [mm]", value=12.0, step=0.01, key=f"dmin{i}")
+        st.info(f"{t['var_title']} {i+1}")
+        v_label = st.text_input(t["var_name"], value=f"{t['var_title']} {i+1}", key=f"lab{i}", help=t["var_name_help"])
         
-        if v_type == "Vlnitá":
-            d_max = st.number_input(f"Maximální Ø [mm]", value=15.0, step=0.01, key=f"dmax{i}")
-            pitch = st.selectbox(f"Rozteč [mm]", [3.1, 3.3, 3.7, 4.0, 4.65], index=2, key=f"p{i}")
+        type_options = [t["type_smooth"], t["type_corrugated"]]
+        v_type_sel = st.selectbox(t["var_type"], type_options, index=(1 if i > 0 else 0), key=f"t{i}")
+        is_corrugated = (v_type_sel == t["type_corrugated"])
+        
+        d_min = st.number_input(t["d_min"], value=12.0, step=0.01, key=f"dmin{i}")
+        
+        if is_corrugated:
+            d_max = st.number_input(t["d_max"], value=15.0, step=0.01, key=f"dmax{i}")
+            pitch = st.selectbox(t["pitch"], [3.1, 3.3, 3.7, 4.0, 4.65], index=2, key=f"p{i}")
         else:
             d_max = d_min
             pitch = 3.7
             st.write("---")
-            st.caption("Parametry vlnovce nejsou vyžadovány.")
+            st.caption(t["smooth_note"])
             
-        variants.append({"label": v_label, "type": v_type, "d_min": d_min, "d_max": d_max, "pitch": pitch})
+        variants.append({"label": v_label, "is_corrugated": is_corrugated, "type_label": v_type_sel, "d_min": d_min, "d_max": d_max, "pitch": pitch})
 
 # --- VÝPOČETNÍ LOGIKA ---
 def calculate_dp(v_cfg, flow_list):
@@ -235,7 +490,7 @@ def calculate_dp(v_cfg, flow_list):
     Re = (final_density * v_vel * d_m) / visc
     l_smooth = np.array([(64/r if r < 2300 else 0.3164/r**0.25) for r in Re])
     
-    if v_cfg['type'] == "Vlnitá":
+    if v_cfg['is_corrugated']:
         rel_rough = (v_cfg['d_max'] - v_cfg['d_min']) / (2 * v_cfg['d_min'])
         corr = 1 + (rel_rough * 12) * (0.004 / (v_cfg['pitch']/1000))
         l_final = l_smooth * max(corr, 3.2)
@@ -246,7 +501,7 @@ def calculate_dp(v_cfg, flow_list):
     return dp_pa / 1000
 
 # --- VÝSTUPY ---
-if st.button("🚀 SPOČÍTAT A GENEROVAT GRAF", use_container_width=True):
+if st.button(t["calc_btn"], use_container_width=True):
     log_calculation()
     
     flow_axis = np.linspace(0.1, flow_max, 100)
@@ -257,15 +512,15 @@ if st.button("🚀 SPOČÍTAT A GENEROVAT GRAF", use_container_width=True):
         dp_curve = calculate_dp(v, flow_axis)
         ax.plot(flow_axis, dp_curve, lw=2.5, label=v['label'])
         results.append({
-            "Název": v['label'],
-            "Typ": v['type'],
-            "Konfigurace": f"Ø{v['d_min']:.2f}" if v['type'] == "Hladká" else f"Ø{v['d_min']:.2f}/Ø{v['d_max']:.2f} p{v['pitch']}",
-            "Ztráta [kPa]": dp_curve[-1]
+            t["res_name"]: v['label'],
+            t["res_type"]: v['type_label'],
+            t["res_cfg"]: f"Ø{v['d_min']:.2f}" if not v['is_corrugated'] else f"Ø{v['d_min']:.2f}/Ø{v['d_max']:.2f} p{v['pitch']}",
+            t["res_loss"]: dp_curve[-1]
         })
 
     ax.set_title(f"Report: {fluid_name} @ {temp}°C")
-    ax.set_xlabel("Průtok [l/min]")
-    ax.set_ylabel("Tlaková ztráta [kPa]")
+    ax.set_xlabel(t["graph_flow"])
+    ax.set_ylabel(t["graph_dp"])
     ax.legend()
     ax.grid(True, alpha=0.3)
     
@@ -273,9 +528,10 @@ if st.button("🚀 SPOČÍTAT A GENEROVAT GRAF", use_container_width=True):
 
     # Tabulka
     df = pd.DataFrame(results)
-    ref_val = df.iloc[0]["Ztráta [kPa]"]
-    df["Ztráta [kPa]"] = df["Ztráta [kPa]"].map('{:.3f}'.format)
-    df["Rozdíl k Var 1"] = df["Ztráta [kPa]"].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
+    loss_col = t["res_loss"]
+    ref_val = df.iloc[0][loss_col]
+    df[loss_col] = df[loss_col].map('{:.3f}'.format)
+    df[t["res_diff"]] = df[loss_col].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
     st.table(df)
 '''
 
