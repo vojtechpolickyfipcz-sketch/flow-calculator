@@ -1,68 +1,80 @@
-app_code = '''import streamlit as st
+# --- DOPLŇTE VAŠE JMÉNO A NÁZEV REPOZITÁŘE ---
+GH_USER = "VojtechPolicky"
+GH_REPO = "hydraulicky-kalkulator"
+GH_TOKEN = "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"
+
+app_code = f'''import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import requests
+import base64
 import os
+import io
 from datetime import datetime
 
-# --- SPOLEHLIVÉ CLOUDOVÉ ÚLOŽIŠTĚ (KVDB.IO) ---
-BUCKET_ID = "fip_hydr_stat_2026"
-BASE_URL = f"https://kvdb.io/{BUCKET_ID}"
+# --- GITHUB KONFIGURACE PRO TRVALÝ ZÁPIS ---
+GH_TOKEN = "{GH_TOKEN}"
+GH_USER = "{GH_USER}"
+GH_REPO = "{GH_REPO}"
+FILE_PATH = "usage_log.csv"
 
-def fetch_stats_from_cloud():
-    """Načte data ze serveru (volá se pouze při startu nebo po kliknutí na výpočet)."""
+API_URL = f"https://api.github.com/repos/{{GH_USER}}/{{GH_REPO}}/contents/{{FILE_PATH}}"
+HEADERS = {{
+    "Authorization": f"token {{GH_TOKEN}}",
+    "Accept": "application/vnd.github.v3+json"
+}}
+
+def log_to_github():
+    """Zapíše nový řádek přímo do souboru usage_log.csv v GitHub repozitáři."""
     now = datetime.now()
-    curr_month_str = now.strftime("%Y-%m")
-    
-    # 1. Celkový součet
-    total_count = 0
-    try:
-        r_total = requests.get(f"{BASE_URL}/total", timeout=2)
-        if r_total.status_code == 200 and r_total.text.strip():
-            total_count = int(r_total.text.strip())
-    except Exception:
-        total_count = 0
-
-    # 2. Tento měsíc
-    curr_month_count = 0
-    try:
-        r_curr = requests.get(f"{BASE_URL}/{curr_month_str}", timeout=2)
-        if r_curr.status_code == 200 and r_curr.text.strip():
-            curr_month_count = int(r_curr.text.strip())
-    except Exception:
-        curr_month_count = 0
-
-    # 3. Přehled za měsíce
-    monthly_records = []
-    for m_offset in range(6):
-        m_date = pd.date_range(end=now, periods=6, freq='MS')[5 - m_offset]
-        m_str = m_date.strftime("%Y-%m")
-        try:
-            r_m = requests.get(f"{BASE_URL}/{m_str}", timeout=1.5)
-            if r_m.status_code == 200 and r_m.text.strip():
-                val = int(r_m.text.strip())
-                if val > 0:
-                    monthly_records.append({"Měsíc": m_str, "Počet analýz": val})
-        except Exception:
-            pass
-
-    monthly_df = pd.DataFrame(monthly_records) if monthly_records else pd.DataFrame(columns=["Měsíc", "Počet analýz"])
-    return total_count, curr_month_count, monthly_df
-
-def log_calculation_and_update():
-    """Odešle data na cloud a aktualizuje statistiku v paměti."""
-    now = datetime.now()
-    curr_month = now.strftime("%Y-%m")
+    new_line = f"{{now.strftime('%Y-%m-%d %H:%M:%S')}},{{now.strftime('%Y-%m')}}\\n"
     
     try:
-        requests.post(f"{BASE_URL}/total?action=increment", data="1", timeout=2)
-        requests.post(f"{BASE_URL}/{curr_month}?action=increment", data="1", timeout=2)
+        r = requests.get(API_URL, headers=HEADERS, timeout=4)
+        if r.status_code == 200:
+            file_data = r.json()
+            sha = file_data['sha']
+            content = base64.b64decode(file_data['content']).decode('utf-8')
+            updated_content = content + new_line
+            payload = {{
+                "message": f"Log calculation: {{now.strftime('%Y-%m-%d %H:%M')}}",
+                "content": base64.b64encode(updated_content.encode('utf-8')).decode('utf-8'),
+                "sha": sha
+            }}
+        else:
+            header = "timestamp,month_year\\n"
+            updated_content = header + new_line
+            payload = {{
+                "message": "Init usage log",
+                "content": base64.b64encode(updated_content.encode('utf-8')).decode('utf-8')
+            }}
+            
+        requests.put(API_URL, headers=HEADERS, json=payload, timeout=4)
     except Exception:
         pass
-    
-    # Aktualizace lokální paměti bez nutnosti dalšího dotazu při psaní
-    st.session_state["total_c"], st.session_state["curr_m_c"], st.session_state["monthly_df"] = fetch_stats_from_cloud()
+
+def fetch_stats_from_github():
+    """Stáhne a spočítá statistiku z GitHub CSV souboru."""
+    try:
+        r = requests.get(API_URL, headers=HEADERS, timeout=4)
+        if r.status_code == 200:
+            content = base64.b64decode(r.json()['content']).decode('utf-8')
+            df = pd.read_csv(io.StringIO(content))
+            df = df.dropna(subset=['month_year'])
+            
+            total_count = len(df)
+            curr_month_str = datetime.now().strftime("%Y-%m")
+            curr_month_count = len(df[df['month_year'] == curr_month_str])
+            
+            monthly_df = df['month_year'].value_counts().reset_index()
+            monthly_df.columns = ["Měsíc", "Počet analýz"]
+            monthly_df = monthly_df.sort_values(by="Měsíc", ascending=False)
+            
+            return total_count, curr_month_count, monthly_df
+    except Exception:
+        pass
+    return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"])
 
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
@@ -70,35 +82,31 @@ st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 st.markdown(
     """
     <style>
-        [data-testid="stSidebar"] {
+        [data-testid="stSidebar"] {{
             min-width: 405px;
             max-width: 405px;
-        }
+        }}
         button[title="View fullscreen"],
-        [data-testid="StyledFullScreenButton"] {
+        [data-testid="StyledFullScreenButton"] {{
             display: none !important;
             visibility: hidden !important;
             pointer-events: none !important;
-        }
-        div[data-testid="stHorizontalBlock"] button {
+        }}
+        div[data-testid="stHorizontalBlock"] button {{
             padding: 2px 6px !important;
             font-size: 13px !important;
-        }
+        }}
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# Inicializace lokálního stavu
 if "current_lang" not in st.session_state:
     st.session_state["current_lang"] = "cs"
 
-if "total_c" not in st.session_state:
-    st.session_state["total_c"], st.session_state["curr_m_c"], st.session_state["monthly_df"] = fetch_stats_from_cloud()
-
 # --- JAZYKOVÉ SLOVNÍKY ---
-TRANSLATIONS = {
-    "cs": {
+TRANSLATIONS = {{
+    "cs": {{
         "title": "📊 Kalkulátor tlakových ztrát: Hladká vs. Vlnitá trubka",
         "subtitle": "Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.",
         "btn_manual": "❓ Nápověda / Manuál",
@@ -111,7 +119,8 @@ TRANSLATIONS = {
         "geom_header": "📏 Společná geometrie",
         "length": "Délka trasy [mm]",
         "flow_max": "Maximální sledovaný průtok [l/min]",
-        "usage_header": "📈 Využití kalkulátoru",
+        "usage_header": "📈 Vytížení systému",
+        "btn_stats": "📊 Zobrazit statistiku vytížení",
         "this_month": "Tento měsíc",
         "total_calc": "Celkem",
         "monthly_overview": "📅 Přehled po měsících",
@@ -149,8 +158,8 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
 * **[3. Tlačítko]** Klikněte na **🚀 SPOČÍTAT A GENEROVAT GRAF**.
 * **[4. Vyhodnocení]** Zkontrolujte graf a souhrnnou tabulku.
         """
-    },
-    "en": {
+    }},
+    "en": {{
         "title": "📊 Pressure Drop Calculator: Smooth vs. Corrugated Tube",
         "subtitle": "Tool for comparing pressure drops with custom variant naming.",
         "btn_manual": "❓ Help / Manual",
@@ -163,7 +172,8 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "geom_header": "📏 Common Geometry",
         "length": "Tube Length [mm]",
         "flow_max": "Max Monitored Flow [l/min]",
-        "usage_header": "📈 Calculator Usage",
+        "usage_header": "📈 System Usage",
+        "btn_stats": "📊 Show usage statistics",
         "this_month": "This Month",
         "total_calc": "Total",
         "monthly_overview": "📅 Monthly Overview",
@@ -190,8 +200,8 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_loss": "Loss [kPa]",
         "res_diff": "Diff to Var 1",
         "manual_body": "### User Manual"
-    },
-    "de": {
+    }},
+    "de": {{
         "title": "📊 Druckverlust-Rechner: Glattrohr vs. Wellrohr",
         "subtitle": "Werkzeug zum Vergleichen von Druckverlusten.",
         "btn_manual": "❓ Hilfe / Handbuch",
@@ -204,7 +214,8 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "geom_header": "📏 Gemeinsame Geometrie",
         "length": "Leitungslänge [mm]",
         "flow_max": "Max. Durchfluss [l/min]",
-        "usage_header": "📈 Rechner-Nutzung",
+        "usage_header": "📈 Systemauslastung",
+        "btn_stats": "📊 Nutzungsstatistik anzeigen",
         "this_month": "Diesen Monat",
         "total_calc": "Gesamt",
         "monthly_overview": "📅 Monatsübersicht",
@@ -231,8 +242,8 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_loss": "Verlust [kPa]",
         "res_diff": "Diff. zu Var 1",
         "manual_body": "### Benutzerhandbuch"
-    },
-    "ro": {
+    }},
+    "ro": {{
         "title": "📊 Calculator Cădere de Presiune: Tub Neted vs. Ondulat",
         "subtitle": "Instrument pentru compararea căderilor de presiune.",
         "btn_manual": "❓ Ajutor / Manual",
@@ -245,7 +256,8 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "geom_header": "📏 Geometrie Comună",
         "length": "Lungime Traseu [mm]",
         "flow_max": "Debit Maxim Urmărit [l/min]",
-        "usage_header": "📈 Utilizare Calculator",
+        "usage_header": "📈 Utilizare Sistem",
+        "btn_stats": "📊 Afișează statistici",
         "this_month": "Luna Aceasta",
         "total_calc": "Total",
         "monthly_overview": "📅 Prezentare Lunară",
@@ -272,8 +284,8 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_loss": "Pierdere [kPa]",
         "res_diff": "Dif. față de Var 1",
         "manual_body": "### Manual de Utilizare"
-    },
-    "es": {
+    }},
+    "es": {{
         "title": "📊 Calculadora de Caída de Presión: Tubo Liso vs. Corrugado",
         "subtitle": "Herramienta para comparar pérdidas de presión.",
         "btn_manual": "❓ Ayuda / Manual",
@@ -286,7 +298,8 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "geom_header": "📏 Geometría Común",
         "length": "Longitud de Tubería [mm]",
         "flow_max": "Flujo Máximo [l/min]",
-        "usage_header": "📈 Uso de la Calculadora",
+        "usage_header": "📈 Uso del Sistema",
+        "btn_stats": "📊 Ver estadísticas de uso",
         "this_month": "Este Mes",
         "total_calc": "Total",
         "monthly_overview": "📅 Resumen Mensual",
@@ -313,12 +326,33 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_loss": "Pérdida [kPa]",
         "res_diff": "Dif. vs Var 1",
         "manual_body": "### Manual de Usuario"
-    }
-}
+    }}
+}}
 
 @st.dialog("Manual", width="large")
 def show_manual(lang_code):
     st.markdown(TRANSLATIONS[lang_code]["manual_body"])
+
+@st.dialog("Statistika vytížení", width="medium")
+def show_stats_dialog(lang_code):
+    t_local = TRANSLATIONS[lang_code]
+    with st.spinner("Načítám data z GitHub repozitáře..."):
+        total_c, curr_m_c, monthly_data = fetch_stats_from_github()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(label=t_local["this_month"], value=curr_m_c)
+    with col2:
+        st.metric(label=t_local["total_calc"], value=total_c)
+        
+    st.divider()
+    st.markdown(f"#### {{t_local['monthly_overview']}}")
+    if not monthly_data.empty:
+        m_display = monthly_data.copy()
+        m_display.columns = [t_local["col_month"], t_local["col_count"]]
+        st.dataframe(m_display, use_container_width=True, hide_index=True)
+    else:
+        st.caption(t_local["no_calc"])
 
 # --- HLAVIČKA ---
 top_left, top_right = st.columns([4.2, 1.8])
@@ -336,7 +370,7 @@ with top_right:
     for idx, (emoji, code_label, lang_id) in enumerate(flags):
         with f_cols[idx]:
             btn_type = "primary" if st.session_state["current_lang"] == lang_id else "secondary"
-            if st.button(f"{emoji} {code_label}", key=f"btn_lang_{lang_id}", type=btn_type, use_container_width=True):
+            if st.button(f"{{emoji}} {{code_label}}", key=f"btn_lang_{{lang_id}}", type=btn_type, use_container_width=True):
                 st.session_state["current_lang"] = lang_id
                 st.rerun()
 
@@ -381,22 +415,10 @@ with st.sidebar:
 
     st.divider()
 
-    # Zobrazení statistik z lokálního stavu (žádné čekání ani šednutí)
+    # Tlačítko pro vyvolání statistiky
     st.header(t["usage_header"])
-    stat_c1, stat_c2 = st.columns(2)
-    with stat_c1:
-        st.metric(label=t["this_month"], value=st.session_state["curr_m_c"])
-    with stat_c2:
-        st.metric(label=t["total_calc"], value=st.session_state["total_c"])
-        
-    with st.expander(t["monthly_overview"]):
-        m_df = st.session_state["monthly_df"]
-        if not m_df.empty:
-            m_df_display = m_df.copy()
-            m_df_display.columns = [t["col_month"], t["col_count"]]
-            st.dataframe(m_df_display, use_container_width=True, hide_index=True)
-        else:
-            st.caption(t["no_calc"])
+    if st.button(t["btn_stats"], use_container_width=True):
+        show_stats_dialog(lang)
 
 final_density = dens_val * 1000 if dens_unit == "g/cm³" else dens_val
 
@@ -407,25 +429,25 @@ variants = []
 
 for i in range(4):
     with cols[i]:
-        st.info(f"{t['var_title']} {i+1}")
-        v_label = st.text_input(t["var_name"], value=f"{t['var_title']} {i+1}", key=f"lab{i}", help=t["var_name_help"])
+        st.info(f"{{t['var_title']}} {{i+1}}")
+        v_label = st.text_input(t["var_name"], value=f"{{t['var_title']}} {{i+1}}", key=f"lab{{i}}", help=t["var_name_help"])
         
         type_options = [t["type_smooth"], t["type_corrugated"]]
-        v_type_sel = st.selectbox(t["var_type"], type_options, index=(1 if i > 0 else 0), key=f"t{i}")
+        v_type_sel = st.selectbox(t["var_type"], type_options, index=(1 if i > 0 else 0), key=f"t{{i}}")
         is_corrugated = (v_type_sel == t["type_corrugated"])
         
-        d_min = st.number_input(t["d_min"], value=12.0, step=0.01, key=f"dmin{i}")
+        d_min = st.number_input(t["d_min"], value=12.0, step=0.01, key=f"dmin{{i}}")
         
         if is_corrugated:
-            d_max = st.number_input(t["d_max"], value=15.0, step=0.01, key=f"dmax{i}")
-            pitch = st.selectbox(t["pitch"], [3.1, 3.3, 3.7, 4.0, 4.65], index=2, key=f"p{i}")
+            d_max = st.number_input(t["d_max"], value=15.0, step=0.01, key=f"dmax{{i}}")
+            pitch = st.selectbox(t["pitch"], [3.1, 3.3, 3.7, 4.0, 4.65], index=2, key=f"p{{i}}")
         else:
             d_max = d_min
             pitch = 3.7
             st.write("---")
             st.caption(t["smooth_note"])
             
-        variants.append({"label": v_label, "is_corrugated": is_corrugated, "type_label": v_type_sel, "d_min": d_min, "d_max": d_max, "pitch": pitch})
+        variants.append({{"label": v_label, "is_corrugated": is_corrugated, "type_label": v_type_sel, "d_min": d_min, "d_max": d_max, "pitch": pitch}})
 
 # --- VÝPOČETNÍ LOGIKA ---
 def calculate_dp(v_cfg, flow_list):
@@ -447,8 +469,8 @@ def calculate_dp(v_cfg, flow_list):
 
 # --- VÝSTUPY ---
 if st.button(t["calc_btn"], use_container_width=True):
-    # Odeslání do cloudu a reload statistiky proběhne pouze ZDE
-    log_calculation_and_update()
+    # Zápis nového řádku přímo na GitHub
+    log_to_github()
     
     flow_axis = np.linspace(0.1, flow_max, 100)
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -457,14 +479,14 @@ if st.button(t["calc_btn"], use_container_width=True):
     for i, v in enumerate(variants):
         dp_curve = calculate_dp(v, flow_axis)
         ax.plot(flow_axis, dp_curve, lw=2.5, label=v['label'])
-        results.append({
+        results.append({{
             t["res_name"]: v['label'],
             t["res_type"]: v['type_label'],
-            t["res_cfg"]: f"Ø{v['d_min']:.2f}" if not v['is_corrugated'] else f"Ø{v['d_min']:.2f}/Ø{v['d_max']:.2f} p{v['pitch']}",
+            t["res_cfg"]: f"Ø{{v['d_min']:.2f}}" if not v['is_corrugated'] else f"Ø{{v['d_min']:.2f}/Ø{{v['d_max']:.2f}} p{{v['pitch']}}",
             t["res_loss"]: dp_curve[-1]
-        })
+        }})
 
-    ax.set_title(f"Report: {fluid_name} @ {temp}°C")
+    ax.set_title(f"Report: {{fluid_name}} @ {{temp}}°C")
     ax.set_xlabel(t["graph_flow"])
     ax.set_ylabel(t["graph_dp"])
     ax.legend()
@@ -476,17 +498,13 @@ if st.button(t["calc_btn"], use_container_width=True):
     df = pd.DataFrame(results)
     loss_col = t["res_loss"]
     ref_val = df.iloc[0][loss_col]
-    df[loss_col] = df[loss_col].map('{:.3f}'.format)
-    df[t["res_diff"]] = df[loss_col].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
+    df[loss_col] = df[loss_col].map('{{:.3f}}'.format)
+    df[t["res_diff"]] = df[loss_col].astype(float).apply(lambda x: f"{{((x/ref_val)-1)*100:+.2f}} %" if ref_val > 0 else "0.00 %")
     st.table(df)
 '''
 
 with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
-with open("requirements.txt", "w", encoding="utf-8") as f:
-    f.write("streamlit\nnumpy\nmatplotlib\npandas\nrequests\n")
-
 from google.colab import files
 files.download("app.py")
-files.download("requirements.txt")
