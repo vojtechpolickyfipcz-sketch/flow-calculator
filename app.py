@@ -2,56 +2,68 @@ app_code = '''import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import requests
 import os
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
-# --- GOOGLE SHEETS KONFIGURACE ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1D-qbPNN6Wkz6yXOw-7TLuq71Sy9YWYelh_SPBtO_fcs/edit?usp=sharing"
+# --- BEZPEČNÉ ANONYMNÍ POČÍTADLO (BEZ GOOGLE ÚČTU) ---
+# Unikátní prefix projektu (můžete si zvolit jakýkoliv vlastní text)
+APP_NAMESPACE = "fip-hydraulicky-srovnavac-v4"
 
 def log_calculation():
-    """Zapíše nový řádek do Google Tabulky."""
+    """Navýší celkové počítadlo a počítadlo pro aktuální měsíc."""
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df_existing = conn.read(spreadsheet=SHEET_URL, ttl=0)
-        
         now = datetime.now()
-        new_row = pd.DataFrame([{
-            "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "month_year": now.strftime("%Y-%m")
-        }])
+        month_key = now.strftime("%Y-%m")
         
-        if df_existing is None or df_existing.empty:
-            updated_df = new_row
-        else:
-            updated_df = pd.concat([df_existing, new_row], ignore_index=True)
-            
-        conn.update(spreadsheet=SHEET_URL, data=updated_df)
-    except Exception as e:
-        st.sidebar.warning(f"Chyba zápisu do Google Sheets: {e}")
+        # 1. Navýšení celkového součtu
+        requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/total/up", timeout=3)
+        # 2. Navýšení pro konkrétní měsíc
+        requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/{month_key}/up", timeout=3)
+    except Exception:
+        pass
 
 def get_stats():
-    """Načte data z Google Tabulky a spočítá statistiky."""
+    """Načte hodnoty počítadel."""
+    now = datetime.now()
+    curr_month_key = now.strftime("%Y-%m")
+    
+    total_count = 0
+    curr_month_count = 0
+    monthly_records = []
+    
+    # Načtení celkového součtu
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(spreadsheet=SHEET_URL, ttl=2)
-        
-        if df is None or df.empty or "month_year" not in df.columns:
-            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"])
-        
-        df = df.dropna(subset=["month_year"])
-        total_count = len(df)
-        
-        current_month_str = datetime.now().strftime("%Y-%m")
-        curr_month_count = len(df[df["month_year"] == current_month_str])
-        
-        monthly_df = df["month_year"].value_counts().reset_index()
-        monthly_df.columns = ["Měsíc", "Počet analýz"]
-        monthly_df = monthly_df.sort_values(by="Měsíc", ascending=False)
-        
-        return total_count, curr_month_count, monthly_df
+        r_total = requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/total", timeout=3)
+        if r_total.status_code == 200:
+            total_count = r_total.json().get("count", 0)
     except Exception:
-        return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"])
+        total_count = 0
+
+    # Načtení aktuálního měsíce
+    try:
+        r_curr = requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/{curr_month_key}", timeout=3)
+        if r_curr.status_code == 200:
+            curr_month_count = r_curr.json().get("count", 0)
+    except Exception:
+        curr_month_count = 0
+
+    # Přehled pro aktuální a minulé měsíce
+    # Kontroluje posledních 6 měsíců
+    for m_offset in range(6):
+        m_date = pd.date_range(end=now, periods=6, freq='MS')[5 - m_offset]
+        m_str = m_date.strftime("%Y-%m")
+        try:
+            r_m = requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/{m_str}", timeout=2)
+            if r_m.status_code == 200:
+                cnt = r_m.json().get("count", 0)
+                if cnt > 0:
+                    monthly_records.append({"Měsíc": m_str, "Počet analýz": cnt})
+        except Exception:
+            pass
+
+    monthly_df = pd.DataFrame(monthly_records) if monthly_records else pd.DataFrame(columns=["Měsíc", "Počet analýz"])
+    return total_count, curr_month_count, monthly_df
 
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
@@ -124,35 +136,20 @@ TRANSLATIONS = {
         "res_diff": "Rozdíl k Var 1",
         "manual_body": """
 ### 1. 🎯 Úvod a k čemu aplikace slouží
-Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát ($\\Delta p$) při proudění kapalin v potrubí. Umožňuje přímo porovnat chování hladkých trubek a trubek s vlnovcovým profilem.
+Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát ($\\Delta p$) při proudění kapalin v potrubí.
 
 ---
 
 ### 2. ⚡ Rychlý postup práce
-* **[1. Levý panel]** Zadejte vlastnosti kapaliny (hustota, viskozita, teplota) a společnou délku trasy.
-* **[2. Hlavní plocha]** Nakonfigurujte až 4 porovnávané varianty (typ profilu, průměry, rozteč vln).
-* **[3. Tlačítko]** Klikněte na velké tlačítko **🚀 SPOČÍTAT A GENEROVAT GRAF**.
-* **[4. Vyhodnocení]** Zkontrolujte průběh křivek v grafu a procentuální srovnání v tabulce.
-
----
-
-### 3. ⚙️ Detailní popis parametrů a vstupů
-* **Název kapaliny:** Identifikační název kapaliny v záhlaví grafu.
-* **Viskozita [Pa·s]:** Dynamická viskozita kapaliny (voda $\\approx 0.0010$, chladicí směsi vyšší).
-* **Vnitřní Ø ($d_{min}$):** Světlost / vnitřní průměr (u vlnovce vnitřní pata profilu).
-* **Maximální Ø ($d_{max}$):** Vnější průměr vlny (vrchol profilu vlnovce).
-* **Rozteč ($p$):** Osová vzdálenost mezi jednotlivými vlnami profilu.
-
----
-
-### 4. 📊 Interpretace výstupů
-* **Graf tlakové ztráty:** Znázorňuje závislost tlakového odporu [kPa] na průtoku [l/min].
-* **Porovnávací tabulka:** Nabízí přesné hodnoty při maximálním průtoku a procentuální rozdíl vztažený k Variantě 1.
+* **[1. Levý panel]** Zadejte vlastnosti kapaliny (hustota, viskozita, teplota) a délku trasy.
+* **[2. Hlavní plocha]** Nakonfigurujte až 4 porovnávané varianty.
+* **[3. Tlačítko]** Klikněte na **🚀 SPOČÍTAT A GENEROVAT GRAF**.
+* **[4. Vyhodnocení]** Zkontrolujte graf a souhrnnou tabulku.
         """
     },
     "en": {
         "title": "📊 Pressure Drop Calculator: Smooth vs. Corrugated Tube",
-        "subtitle": "Tool for comparing pressure drops with custom variant naming. The goal is to evaluate the impact of corrugated profiles and increased resistance.",
+        "subtitle": "Tool for comparing pressure drops with custom variant naming.",
         "btn_manual": "❓ Help / Manual",
         "param_media": "💧 Fluid Parameters",
         "fluid_name": "Fluid Name",
@@ -173,7 +170,7 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "var_header": "Variant Configuration",
         "var_title": "Variant",
         "var_name": "Name/Note",
-        "var_name_help": "Name the variant for the chart legend (e.g., NW12 Sinus)",
+        "var_name_help": "Name the variant for the chart legend",
         "var_type": "Type",
         "type_smooth": "Smooth",
         "type_corrugated": "Corrugated",
@@ -189,22 +186,11 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_cfg": "Configuration",
         "res_loss": "Loss [kPa]",
         "res_diff": "Diff to Var 1",
-        "manual_body": """
-### 1. 🎯 Purpose and Overview
-The Hydraulic Comparator is an interactive web tool for quick calculation and comparison of pressure drops ($\\Delta p$) in fluid piping.
-
----
-
-### 2. ⚡ Quick Workflow
-* **[1. Sidebar]** Enter fluid properties and total length.
-* **[2. Main Screen]** Configure up to 4 variants.
-* **[3. Button]** Click **🚀 CALCULATE AND GENERATE CHART**.
-* **[4. Evaluation]** Review curves and summary table.
-        """
+        "manual_body": "### User Manual"
     },
     "de": {
         "title": "📊 Druckverlust-Rechner: Glattrohr vs. Wellrohr",
-        "subtitle": "Werkzeug zum Vergleichen von Druckverlusten mit individueller Variantenbenennung.",
+        "subtitle": "Werkzeug zum Vergleichen von Druckverlusten.",
         "btn_manual": "❓ Hilfe / Handbuch",
         "param_media": "💧 Medienparameter",
         "fluid_name": "Name des Mediums",
@@ -225,7 +211,7 @@ The Hydraulic Comparator is an interactive web tool for quick calculation and co
         "var_header": "Variantenkonfiguration",
         "var_title": "Variante",
         "var_name": "Name/Notiz",
-        "var_name_help": "Benennen Sie die Variante für die Diagrammlegende",
+        "var_name_help": "Benennen Sie die Variante",
         "var_type": "Typ",
         "type_smooth": "Glatt",
         "type_corrugated": "Gewellt",
@@ -245,7 +231,7 @@ The Hydraulic Comparator is an interactive web tool for quick calculation and co
     },
     "ro": {
         "title": "📊 Calculator Cădere de Presiune: Tub Neted vs. Ondulat",
-        "subtitle": "Instrument pentru compararea căderilor de presiune cu denumirea personalizată a variantelor.",
+        "subtitle": "Instrument pentru compararea căderilor de presiune.",
         "btn_manual": "❓ Ajutor / Manual",
         "param_media": "💧 Parametri Fluid",
         "fluid_name": "Nume Fluid",
@@ -266,7 +252,7 @@ The Hydraulic Comparator is an interactive web tool for quick calculation and co
         "var_header": "Configurare Variante",
         "var_title": "Varianta",
         "var_name": "Nume/Notă",
-        "var_name_help": "Denumiți varianta pentru legenda graficului",
+        "var_name_help": "Denumiți varianta",
         "var_type": "Tip",
         "type_smooth": "Neted",
         "type_corrugated": "Ondulat",
@@ -286,7 +272,7 @@ The Hydraulic Comparator is an interactive web tool for quick calculation and co
     },
     "es": {
         "title": "📊 Calculadora de Caída de Presión: Tubo Liso vs. Corrugado",
-        "subtitle": "Herramienta para comparar pérdidas de presión con personalización de nombres de variantes.",
+        "subtitle": "Herramienta para comparar pérdidas de presión.",
         "btn_manual": "❓ Ayuda / Manual",
         "param_media": "💧 Parámetros del Fluido",
         "fluid_name": "Nombre del Fluido",
@@ -307,7 +293,7 @@ The Hydraulic Comparator is an interactive web tool for quick calculation and co
         "var_header": "Configuración de Variantes",
         "var_title": "Variante",
         "var_name": "Nombre/Nota",
-        "var_name_help": "Nombre de la variante para la leyenda del gráfico",
+        "var_name_help": "Nombre de la variante",
         "var_type": "Tipo",
         "type_smooth": "Liso",
         "type_corrugated": "Corrugado",
@@ -327,7 +313,6 @@ The Hydraulic Comparator is an interactive web tool for quick calculation and co
     }
 }
 
-# --- DIALOGOVÉ OKNO PRO NÁPOVĚDU ---
 @st.dialog("Manual", width="large")
 def show_manual(lang_code):
     st.markdown(TRANSLATIONS[lang_code]["manual_body"])
@@ -495,7 +480,7 @@ with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
 with open("requirements.txt", "w", encoding="utf-8") as f:
-    f.write("streamlit\nnumpy\nmatplotlib\npandas\nst-gsheets-connection\n")
+    f.write("streamlit\nnumpy\nmatplotlib\npandas\nrequests\n")
 
 from google.colab import files
 files.download("app.py")
