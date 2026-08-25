@@ -8,6 +8,12 @@ import os
 import io
 from datetime import datetime
 
+# Importy pro tvorbu PDF protokolu
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
 # --- GITHUB AUTENTIZACE ZE SECRETS ---
 try:
     GH_TOKEN = st.secrets["GH_TOKEN"]
@@ -31,7 +37,6 @@ def get_headers():
 def log_to_github():
     """Zapíše nový řádek přímo do souboru usage_log.csv v GitHub repozitáři."""
     if not GH_TOKEN or not GH_USER or not GH_REPO:
-        st.warning("⚠️ Chybí nastavení GitHub autentizace v Secrets.")
         return
         
     now = datetime.now()
@@ -39,7 +44,7 @@ def log_to_github():
     headers = get_headers()
     
     try:
-        r = requests.get(API_URL, headers=headers, timeout=5)
+        r = requests.get(API_URL, headers=headers, timeout=4)
         if r.status_code == 200:
             file_data = r.json()
             sha = file_data['sha']
@@ -50,11 +55,7 @@ def log_to_github():
                 "content": base64.b64encode(updated_content.encode('utf-8')).decode('utf-8'),
                 "sha": sha
             }
-            put_r = requests.put(API_URL, headers=headers, json=payload, timeout=5)
-            if put_r.status_code not in [200, 201]:
-                st.toast(f"⚠️ Chyba zápisu na GitHub: HTTP {put_r.status_code}")
-            else:
-                st.toast("✅ Analýza zaznamenána do statistiky.")
+            requests.put(API_URL, headers=headers, json=payload, timeout=4)
         elif r.status_code == 404:
             header = "timestamp,month_year\\n"
             updated_content = header + new_line
@@ -62,15 +63,9 @@ def log_to_github():
                 "message": "Init usage log",
                 "content": base64.b64encode(updated_content.encode('utf-8')).decode('utf-8')
             }
-            put_r = requests.put(API_URL, headers=headers, json=payload, timeout=5)
-            if put_r.status_code not in [200, 201]:
-                st.toast(f"⚠️ Chyba vytvoření logu na GitHub: HTTP {put_r.status_code}")
-            else:
-                st.toast("✅ Vytvořen nový statistický log na GitHubu.")
-        else:
-            st.toast(f"⚠️ GitHub vrátil kód {r.status_code} při čtení logu.")
-    except Exception as e:
-        st.toast(f"⚠️ Chyba spojení s GitHubem: {e}")
+            requests.put(API_URL, headers=headers, json=payload, timeout=4)
+    except Exception:
+        pass
 
 def fetch_stats_from_github():
     """Stáhne a spočítá statistiku z GitHub CSV souboru."""
@@ -95,13 +90,93 @@ def fetch_stats_from_github():
             
             return total_count, curr_month_count, monthly_df, None
         elif r.status_code == 404:
-            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Zatím nebyl proveden žádný výpočet (soubor usage_log.csv ještě neexistuje)."
+            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Zatím nebyl proveden žádný výpočet."
         elif r.status_code in [401, 403]:
-            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba autorizace ({r.status_code}): Token v Secrets nemá oprávnění 'repo'."
+            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba autorizace ({r.status_code}): Token nemá oprávnění 'repo'."
         else:
             return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"GitHub API error: HTTP {r.status_code}"
     except Exception as e:
         return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba spojení: {e}"
+
+# --- GENEROVÁNÍ PDF REPORTU ---
+def create_pdf_report(fig, results_df, fluid_name, temp, dens_val, dens_unit, visc, length, t):
+    pdf_buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        pdf_buffer,
+        pagesize=A4,
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30
+    )
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Styl záhlaví
+    title_style = ParagraphStyle(
+        'MainTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        leading=20,
+        textColor=colors.HexColor('#1E3A8A'),
+        spaceAfter=10
+    )
+    
+    # 1. Záhlaví protokolu
+    elements.append(Paragraph(f"<b>{t['pdf_report_title']}</b>", title_style))
+    elements.append(Paragraph(f"<b>{t['pdf_generated']}:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
+    elements.append(Spacer(1, 10))
+    
+    # 2. Parametry měření (Tabulka)
+    param_data = [
+        [t['pdf_fluid'], str(fluid_name), t['pdf_temp'], f"{temp} °C"],
+        [t['pdf_density'], f"{dens_val} {dens_unit}", t['pdf_visc'], f"{visc:.4f} Pa·s"],
+        [t['pdf_length'], f"{length:.1f} mm", "", ""]
+    ]
+    param_table = Table(param_data, colWidths=[120, 140, 120, 140])
+    param_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F3F4F6')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#111827')),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB'))
+    ]))
+    elements.append(param_table)
+    elements.append(Spacer(1, 12))
+    
+    # 3. Uložení a vložení grafu do PDF
+    img_buf = io.BytesIO()
+    fig.savefig(img_buf, format='png', dpi=200, bbox_inches='tight')
+    img_buf.seek(0)
+    elements.append(RLImage(img_buf, width=520, height=240))
+    elements.append(Spacer(1, 12))
+    
+    # 4. Výsledková tabulka
+    table_headers = list(results_df.columns)
+    table_rows = [table_headers] + results_df.values.tolist()
+    
+    res_table = Table(table_rows, colWidths=[130, 90, 160, 80, 80])
+    res_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D1D5DB'))
+    ]))
+    elements.append(res_table)
+    
+    doc.build(elements)
+    pdf_buffer.seek(0)
+    return pdf_buffer
 
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
@@ -173,6 +248,14 @@ TRANSLATIONS = {
         "res_cfg": "Konfigurace",
         "res_loss": "Ztráta [kPa]",
         "res_diff": "Rozdíl k Var 1",
+        "btn_download_pdf": "📄 Stáhnout protokol (PDF)",
+        "pdf_report_title": "Protokol hydraulické analýzy (FIP)",
+        "pdf_generated": "Vygenerováno",
+        "pdf_fluid": "Kapalina",
+        "pdf_temp": "Teplota",
+        "pdf_density": "Hustota",
+        "pdf_visc": "Viskozita",
+        "pdf_length": "Délka trasy",
         "manual_body": """
 ### 1. 🎯 Úvod a k čemu aplikace slouží
 Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát ($\\Delta p$) při proudění kapalin v potrubí.
@@ -183,7 +266,7 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
 * **[1. Levý panel]** Zadejte vlastnosti kapaliny (hustota, viskozita, teplota) a délku trasy.
 * **[2. Hlavní plocha]** Nakonfigurujte až 4 porovnávané varianty.
 * **[3. Tlačítko]** Klikněte na **🚀 SPOČÍTAT A GENEROVAT GRAF**.
-* **[4. Vyhodnocení]** Zkontrolujte graf a souhrnnou tabulku.
+* **[4. Vyhodnocení]** Zkontrolujte graf, tabulku a případně stáhněte PDF protokol.
         """
     },
     "en": {
@@ -226,6 +309,14 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_cfg": "Configuration",
         "res_loss": "Loss [kPa]",
         "res_diff": "Diff to Var 1",
+        "btn_download_pdf": "📄 Download Report (PDF)",
+        "pdf_report_title": "Hydraulic Analysis Report (FIP)",
+        "pdf_generated": "Generated",
+        "pdf_fluid": "Fluid",
+        "pdf_temp": "Temperature",
+        "pdf_density": "Density",
+        "pdf_visc": "Viscosity",
+        "pdf_length": "Tube Length",
         "manual_body": "### User Manual"
     },
     "de": {
@@ -268,6 +359,14 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_cfg": "Konfiguration",
         "res_loss": "Verlust [kPa]",
         "res_diff": "Diff. zu Var 1",
+        "btn_download_pdf": "📄 Bericht herunterladen (PDF)",
+        "pdf_report_title": "Hydraulischer Analysebericht (FIP)",
+        "pdf_generated": "Erstellt am",
+        "pdf_fluid": "Medium",
+        "pdf_temp": "Temperatur",
+        "pdf_density": "Dichte",
+        "pdf_visc": "Viskosität",
+        "pdf_length": "Leitungslänge",
         "manual_body": "### Benutzerhandbuch"
     },
     "ro": {
@@ -310,6 +409,14 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_cfg": "Configurație",
         "res_loss": "Pierdere [kPa]",
         "res_diff": "Dif. față de Var 1",
+        "btn_download_pdf": "📄 Descarcă raport (PDF)",
+        "pdf_report_title": "Raport Analiză Hidraulică (FIP)",
+        "pdf_generated": "Generat",
+        "pdf_fluid": "Fluid",
+        "pdf_temp": "Temperatură",
+        "pdf_density": "Densitate",
+        "pdf_visc": "Vâscozitate",
+        "pdf_length": "Lungime Traseu",
         "manual_body": "### Manual de Utilizare"
     },
     "es": {
@@ -352,6 +459,14 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "res_cfg": "Configuración",
         "res_loss": "Pérdida [kPa]",
         "res_diff": "Dif. vs Var 1",
+        "btn_download_pdf": "📄 Descargar Reporte (PDF)",
+        "pdf_report_title": "Reporte de Análisis Hidráulico (FIP)",
+        "pdf_generated": "Generado",
+        "pdf_fluid": "Fluido",
+        "pdf_temp": "Temperatura",
+        "pdf_density": "Densidad",
+        "pdf_visc": "Viscosidad",
+        "pdf_length": "Longitud",
         "manual_body": "### Manual de Usuario"
     }
 }
@@ -445,7 +560,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Tlačítko pro vyvolání statistiky
     st.header(t["usage_header"])
     if st.button(t["btn_stats"], use_container_width=True):
         show_stats_dialog(lang)
@@ -502,7 +616,7 @@ if st.button(t["calc_btn"], use_container_width=True):
     log_to_github()
     
     flow_axis = np.linspace(0.1, flow_max, 100)
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(10, 4.5))
     results = []
 
     for i, v in enumerate(variants):
@@ -532,10 +646,29 @@ if st.button(t["calc_btn"], use_container_width=True):
     df[loss_col] = df[loss_col].map('{:.3f}'.format)
     df[t["res_diff"]] = df[loss_col].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
     st.table(df)
+
+    # --- TLAČÍTKO PRO EXPORT DO PDF ---
+    pdf_bytes = create_pdf_report(fig, df, fluid_name, temp, dens_val, dens_unit, visc, length, t)
+    
+    filename_clean = "".join(c for c in fluid_name if c.isalnum() or c in (' ', '_', '-')).strip()
+    pdf_filename = f"FIP_Analysis_{filename_clean}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    
+    st.download_button(
+        label=t["btn_download_pdf"],
+        data=pdf_bytes,
+        file_name=pdf_filename,
+        mime="application/pdf",
+        use_container_width=True
+    )
 '''
 
 with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
+# requirements.txt s knihovnou reportlab pro PDF
+with open("requirements.txt", "w", encoding="utf-8") as f:
+    f.write("streamlit\nnumpy\nmatplotlib\npandas\nrequests\nreportlab\n")
+
 from google.colab import files
 files.download("app.py")
+files.download("requirements.txt")
