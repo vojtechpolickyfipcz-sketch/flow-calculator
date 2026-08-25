@@ -6,58 +6,63 @@ import requests
 import os
 from datetime import datetime
 
-# --- SPOLEHLIVÉ ANONYMNÍ POČÍTADLO ---
-APP_NAMESPACE = "fip-hydraulicky-kalkulator-stats"
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+# --- SPOLEHLIVÉ CLOUDOVÉ ÚLOŽIŠTĚ (KVDB.IO) ---
+BUCKET_ID = "fip_hydr_stat_2026"
+BASE_URL = f"https://kvdb.io/{BUCKET_ID}"
 
-def safe_api_hit(url):
-    """Pomocná funkce pro bezpečné volání počítadla."""
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=4)
-        if r.status_code == 200:
-            return r.json().get("value", r.json().get("count", 0))
-    except Exception:
-        pass
-    return None
-
-def log_calculation():
-    """Navýší celkové počítadlo i počítadlo pro aktuální měsíc."""
+def fetch_stats_from_cloud():
+    """Načte data ze serveru (volá se pouze při startu nebo po kliknutí na výpočet)."""
     now = datetime.now()
-    month_key = now.strftime("%Y_%m")
-    
-    # Navýšení celkem
-    safe_api_hit(f"https://api.countapi.xyz/hit/{APP_NAMESPACE}/total")
-    # Navýšení pro měsíc
-    safe_api_hit(f"https://api.countapi.xyz/hit/{APP_NAMESPACE}/{month_key}")
-
-def get_stats():
-    """Načte data ze serveru."""
-    now = datetime.now()
-    curr_month_key = now.strftime("%Y_%m")
+    curr_month_str = now.strftime("%Y-%m")
     
     # 1. Celkový součet
-    total_count = safe_api_hit(f"https://api.countapi.xyz/get/{APP_NAMESPACE}/total")
-    if total_count is None:
+    total_count = 0
+    try:
+        r_total = requests.get(f"{BASE_URL}/total", timeout=2)
+        if r_total.status_code == 200 and r_total.text.strip():
+            total_count = int(r_total.text.strip())
+    except Exception:
         total_count = 0
 
     # 2. Tento měsíc
-    curr_month_count = safe_api_hit(f"https://api.countapi.xyz/get/{APP_NAMESPACE}/{curr_month_key}")
-    if curr_month_count is None:
+    curr_month_count = 0
+    try:
+        r_curr = requests.get(f"{BASE_URL}/{curr_month_str}", timeout=2)
+        if r_curr.status_code == 200 and r_curr.text.strip():
+            curr_month_count = int(r_curr.text.strip())
+    except Exception:
         curr_month_count = 0
 
-    # 3. Přehled za posledních 6 měsíců
+    # 3. Přehled za měsíce
     monthly_records = []
     for m_offset in range(6):
         m_date = pd.date_range(end=now, periods=6, freq='MS')[5 - m_offset]
-        m_api_key = m_date.strftime("%Y_%m")
-        m_display = m_date.strftime("%Y-%m")
-        
-        cnt = safe_api_hit(f"https://api.countapi.xyz/get/{APP_NAMESPACE}/{m_api_key}")
-        if cnt and cnt > 0:
-            monthly_records.append({"Měsíc": m_display, "Počet analýz": cnt})
+        m_str = m_date.strftime("%Y-%m")
+        try:
+            r_m = requests.get(f"{BASE_URL}/{m_str}", timeout=1.5)
+            if r_m.status_code == 200 and r_m.text.strip():
+                val = int(r_m.text.strip())
+                if val > 0:
+                    monthly_records.append({"Měsíc": m_str, "Počet analýz": val})
+        except Exception:
+            pass
 
     monthly_df = pd.DataFrame(monthly_records) if monthly_records else pd.DataFrame(columns=["Měsíc", "Počet analýz"])
     return total_count, curr_month_count, monthly_df
+
+def log_calculation_and_update():
+    """Odešle data na cloud a aktualizuje statistiku v paměti."""
+    now = datetime.now()
+    curr_month = now.strftime("%Y-%m")
+    
+    try:
+        requests.post(f"{BASE_URL}/total?action=increment", data="1", timeout=2)
+        requests.post(f"{BASE_URL}/{curr_month}?action=increment", data="1", timeout=2)
+    except Exception:
+        pass
+    
+    # Aktualizace lokální paměti bez nutnosti dalšího dotazu při psaní
+    st.session_state["total_c"], st.session_state["curr_m_c"], st.session_state["monthly_df"] = fetch_stats_from_cloud()
 
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
@@ -84,8 +89,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Inicializace lokálního stavu
 if "current_lang" not in st.session_state:
     st.session_state["current_lang"] = "cs"
+
+if "total_c" not in st.session_state:
+    st.session_state["total_c"], st.session_state["curr_m_c"], st.session_state["monthly_df"] = fetch_stats_from_cloud()
 
 # --- JAZYKOVÉ SLOVNÍKY ---
 TRANSLATIONS = {
@@ -372,19 +381,20 @@ with st.sidebar:
 
     st.divider()
 
+    # Zobrazení statistik z lokálního stavu (žádné čekání ani šednutí)
     st.header(t["usage_header"])
-    total_c, curr_m_c, monthly_data = get_stats()
-    
     stat_c1, stat_c2 = st.columns(2)
     with stat_c1:
-        st.metric(label=t["this_month"], value=curr_m_c)
+        st.metric(label=t["this_month"], value=st.session_state["curr_m_c"])
     with stat_c2:
-        st.metric(label=t["total_calc"], value=total_c)
+        st.metric(label=t["total_calc"], value=st.session_state["total_c"])
         
     with st.expander(t["monthly_overview"]):
-        if not monthly_data.empty:
-            monthly_data.columns = [t["col_month"], t["col_count"]]
-            st.dataframe(monthly_data, use_container_width=True, hide_index=True)
+        m_df = st.session_state["monthly_df"]
+        if not m_df.empty:
+            m_df_display = m_df.copy()
+            m_df_display.columns = [t["col_month"], t["col_count"]]
+            st.dataframe(m_df_display, use_container_width=True, hide_index=True)
         else:
             st.caption(t["no_calc"])
 
@@ -437,7 +447,8 @@ def calculate_dp(v_cfg, flow_list):
 
 # --- VÝSTUPY ---
 if st.button(t["calc_btn"], use_container_width=True):
-    log_calculation()
+    # Odeslání do cloudu a reload statistiky proběhne pouze ZDE
+    log_calculation_and_update()
     
     flow_axis = np.linspace(0.1, flow_max, 100)
     fig, ax = plt.subplots(figsize=(10, 5))
