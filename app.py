@@ -6,9 +6,8 @@ import os
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
-# --- GOOGLE SHEETS KONFIGURACE PRO TRVALÉ UKLÁDÁNÍ ---
-# Vložte sem URL vaší veřejně editovatelné Google tabulky
-SHEET_URL = "https://docs.google.com/spreadsheets/d/VASE_ID_TABULKY/edit"
+# --- GOOGLE SHEETS KONFIGURACE ---
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1D-qbPNN6Wkz6yXOw-7TLuq71Sy9YWYelh_SPBtO_fcs/edit?usp=sharing"
 
 def log_calculation():
     """Zapíše nový řádek do Google Tabulky."""
@@ -40,7 +39,6 @@ def get_stats():
         if df is None or df.empty or "month_year" not in df.columns:
             return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"])
         
-        # Očištění od prázdných řádků
         df = df.dropna(subset=["month_year"])
         total_count = len(df)
         
@@ -58,7 +56,6 @@ def get_stats():
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
 
-# Vlastní CSS: Šířka sidebaru, skrytí fullscreenu a styl tlačítek jazyků
 st.markdown(
     """
     <style>
@@ -244,18 +241,7 @@ The Hydraulic Comparator is an interactive web tool for quick calculation and co
         "res_cfg": "Konfiguration",
         "res_loss": "Verlust [kPa]",
         "res_diff": "Diff. zu Var 1",
-        "manual_body": """
-### 1. 🎯 Einführung
-Interaktives Werkzeug zur schnellen Berechnung und zum Vergleich von Druckverlusten ($\\Delta p$) in Rohrleitungen.
-
----
-
-### 2. ⚡ Kurzanleitung
-* **[1. Seitenleiste]** Mediendaten und Rohrlänge eingeben.
-* **[2. Hauptbereich]** Bis zu 4 Varianten konfigurieren.
-* **[3. Ausführen]** Auf **🚀 BERECHNEN** klicken.
-* **[4. Ergebnis]** Diagramm und Vergleichstabelle auswerten.
-        """
+        "manual_body": "### Benutzerhandbuch"
     },
     "ro": {
         "title": "📊 Calculator Cădere de Presiune: Tub Neted vs. Ondulat",
@@ -296,18 +282,7 @@ Interaktives Werkzeug zur schnellen Berechnung und zum Vergleich von Druckverlus
         "res_cfg": "Configurație",
         "res_loss": "Pierdere [kPa]",
         "res_diff": "Dif. față de Var 1",
-        "manual_body": """
-### 1. 🎯 Scop și Utilizare
-Instrument interactiv pentru calculul rapid și compararea căderilor de presiune ($\\Delta p$) în conducte.
-
----
-
-### 2. ⚡ Pași de Lucru
-* **[1. Panou Stânga]** Introduceți proprietățile fluidului și lungimea conductei.
-* **[2. Ecran Principal]** Configurați până la 4 variante.
-* **[3. Buton]** Apăsați pe **🚀 CALCULEAZĂ**.
-* **[4. Evaluare]** Vizualizați graficul și tabelul rezumat.
-        """
+        "manual_body": "### Manual de Utilizare"
     },
     "es": {
         "title": "📊 Calculadora de Caída de Presión: Tubo Liso vs. Corrugado",
@@ -348,18 +323,7 @@ Instrument interactiv pentru calculul rapid și compararea căderilor de presiun
         "res_cfg": "Configuración",
         "res_loss": "Pérdida [kPa]",
         "res_diff": "Dif. vs Var 1",
-        "manual_body": """
-### 1. 🎯 Introducción
-Herramienta interactiva para calcular y comparar pérdidas de presión ($\\Delta p$) en tuberías.
-
----
-
-### 2. ⚡ Flujo de Trabajo
-* **[1. Panel Lateral]** Ingrese las propiedades del fluido y la longitud total.
-* **[2. Pantalla Principal]** Configure hasta 4 variantes independientes.
-* **[3. Botón]** Haga clic en **🚀 CALCULAR**.
-* **[4. Resultados]** Revise las curvas en la gráfica y la tabla resumen.
-        """
+        "manual_body": "### Manual de Usuario"
     }
 }
 
@@ -368,7 +332,7 @@ Herramienta interactiva para calcular y comparar pérdidas de presión ($\\Delta
 def show_manual(lang_code):
     st.markdown(TRANSLATIONS[lang_code]["manual_body"])
 
-# --- HLAVIČKA: TITULEK VLEVO, VOLBA JAZYKŮ A NÁPOVĚDA VPRAVO ---
+# --- HLAVIČKA ---
 top_left, top_right = st.columns([4.2, 1.8])
 
 with top_right:
@@ -401,7 +365,6 @@ st.markdown(t["subtitle"])
 
 # --- SIDEBAR (LEVÝ SLOUPEC) ---
 with st.sidebar:
-    # 1. Logo FIP (zmenšené bez fullscreenu)
     LOGO_FILE = "fip-logo-f-member-of-line-01-04.png"
     if os.path.exists(LOGO_FILE):
         logo_c1, logo_c2, logo_c3 = st.columns([1, 6, 1])
@@ -412,7 +375,6 @@ with st.sidebar:
     
     st.divider()
 
-    # 2. Parametry média
     st.header(t["param_media"])
     fluid_name = st.text_input(t["fluid_name"], "G12+ Specifikace")
     temp = st.number_input(t["temp"], value=22.0, step=0.1)
@@ -425,14 +387,12 @@ with st.sidebar:
     
     visc = st.number_input(t["viscosity"], value=0.0030, format="%.4f", step=0.0001)
     
-    # 3. Společná geometrie
     st.header(t["geom_header"])
     length = st.number_input(t["length"], value=500.0, step=0.01)
     flow_max = st.slider(t["flow_max"], 0.5, 100.0, 25.0, 0.5)
 
     st.divider()
 
-    # 4. Počítadlo využití kalkulátoru
     st.header(t["usage_header"])
     total_c, curr_m_c, monthly_data = get_stats()
     
@@ -534,7 +494,6 @@ if st.button(t["calc_btn"], use_container_width=True):
 with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
-# Aktualizace requirements.txt s knihovnou pro Google Sheets
 with open("requirements.txt", "w", encoding="utf-8") as f:
     f.write("streamlit\nnumpy\nmatplotlib\npandas\nst-gsheets-connection\n")
 
