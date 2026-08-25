@@ -1,6 +1,8 @@
 app_code = '''import streamlit as st
-import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Zajištění stability grafů v prohlížeči
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import requests
 import base64
@@ -16,16 +18,16 @@ from reportlab.lib import colors
 
 # --- GITHUB AUTENTIZACE ZE SECRETS ---
 try:
-    GH_TOKEN = st.secrets["GH_TOKEN"]
-    GH_USER = st.secrets["GH_USER"]
-    GH_REPO = st.secrets["GH_REPO"]
+    GH_TOKEN = st.secrets.get("GH_TOKEN", "")
+    GH_USER = st.secrets.get("GH_USER", "")
+    GH_REPO = st.secrets.get("GH_REPO", "")
 except Exception:
     GH_TOKEN = ""
     GH_USER = ""
     GH_REPO = ""
 
 FILE_PATH = "usage_log.csv"
-API_URL = f"https://api.github.com/repos/{GH_USER}/{GH_REPO}/contents/{FILE_PATH}"
+API_URL = f"https://api.github.com/repos/{GH_USER}/{GH_REPO}/contents/{FILE_PATH}" if (GH_USER and GH_REPO) else ""
 
 def get_headers():
     return {
@@ -36,7 +38,7 @@ def get_headers():
 
 def log_to_github():
     """Zapíše nový řádek přímo do souboru usage_log.csv v GitHub repozitáři."""
-    if not GH_TOKEN or not GH_USER or not GH_REPO:
+    if not GH_TOKEN or not GH_USER or not GH_REPO or not API_URL:
         return
         
     now = datetime.now()
@@ -69,7 +71,7 @@ def log_to_github():
 
 def fetch_stats_from_github():
     """Stáhne a spočítá statistiku z GitHub CSV souboru."""
-    if not GH_TOKEN or not GH_USER or not GH_REPO:
+    if not GH_TOKEN or not GH_USER or not GH_REPO or not API_URL:
         return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Chybí nastavení v Secrets (GH_TOKEN, GH_USER, GH_REPO)."
         
     headers = get_headers()
@@ -92,7 +94,7 @@ def fetch_stats_from_github():
         elif r.status_code == 404:
             return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Zatím nebyl proveden žádný výpočet."
         elif r.status_code in [401, 403]:
-            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba autorizace ({r.status_code}): Token nemá oprávnění 'repo'."
+            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba autorizace ({r.status_code}): Zkontrolujte platnost tokenu v Secrets."
         else:
             return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"GitHub API error: HTTP {r.status_code}"
     except Exception as e:
@@ -100,75 +102,78 @@ def fetch_stats_from_github():
 
 # --- GENEROVÁNÍ PDF REPORTU ---
 def create_pdf_report(img_bytes, results_df, fluid_name, temp, dens_val, dens_unit, visc, length, t):
-    pdf_buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        pdf_buffer,
-        pagesize=A4,
-        rightMargin=30,
-        leftMargin=30,
-        topMargin=30,
-        bottomMargin=30
-    )
-    
-    elements = []
-    styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle(
-        'MainTitle',
-        parent=styles['Heading1'],
-        fontSize=16,
-        leading=20,
-        textColor=colors.HexColor('#1E3A8A'),
-        spaceAfter=10
-    )
-    
-    elements.append(Paragraph(f"<b>{t['pdf_report_title']}</b>", title_style))
-    elements.append(Paragraph(f"<b>{t['pdf_generated']}:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
-    elements.append(Spacer(1, 10))
-    
-    param_data = [
-        [t['pdf_fluid'], str(fluid_name), t['pdf_temp'], f"{temp} °C"],
-        [t['pdf_density'], f"{dens_val} {dens_unit}", t['pdf_visc'], f"{visc:.4f} Pa·s"],
-        [t['pdf_length'], f"{length:.1f} mm", "", ""]
-    ]
-    param_table = Table(param_data, colWidths=[120, 140, 120, 140])
-    param_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F3F4F6')),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#111827')),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB'))
-    ]))
-    elements.append(param_table)
-    elements.append(Spacer(1, 12))
-    
-    elements.append(RLImage(io.BytesIO(img_bytes), width=520, height=240))
-    elements.append(Spacer(1, 12))
-    
-    table_headers = list(results_df.columns)
-    table_rows = [table_headers] + results_df.values.tolist()
-    
-    res_table = Table(table_rows, colWidths=[130, 90, 160, 80, 80])
-    res_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D1D5DB'))
-    ]))
-    elements.append(res_table)
-    
-    doc.build(elements)
-    pdf_buffer.seek(0)
-    return pdf_buffer.getvalue()
+    try:
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            pdf_buffer,
+            pagesize=A4,
+            rightMargin=30,
+            leftMargin=30,
+            topMargin=30,
+            bottomMargin=30
+        )
+        
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle(
+            'MainTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            leading=20,
+            textColor=colors.HexColor('#1E3A8A'),
+            spaceAfter=10
+        )
+        
+        elements.append(Paragraph(f"<b>{t['pdf_report_title']}</b>", title_style))
+        elements.append(Paragraph(f"<b>{t['pdf_generated']}:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
+        elements.append(Spacer(1, 10))
+        
+        param_data = [
+            [t['pdf_fluid'], str(fluid_name), t['pdf_temp'], f"{temp} °C"],
+            [t['pdf_density'], f"{dens_val} {dens_unit}", t['pdf_visc'], f"{visc:.4f} Pa·s"],
+            [t['pdf_length'], f"{length:.1f} mm", "", ""]
+        ]
+        param_table = Table(param_data, colWidths=[120, 140, 120, 140])
+        param_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F3F4F6')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#111827')),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB'))
+        ]))
+        elements.append(param_table)
+        elements.append(Spacer(1, 12))
+        
+        elements.append(RLImage(io.BytesIO(img_bytes), width=520, height=240))
+        elements.append(Spacer(1, 12))
+        
+        table_headers = list(results_df.columns)
+        table_rows = [table_headers] + results_df.values.tolist()
+        
+        res_table = Table(table_rows, colWidths=[130, 90, 160, 80, 80])
+        res_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D1D5DB'))
+        ]))
+        elements.append(res_table)
+        
+        doc.build(elements)
+        pdf_buffer.seek(0)
+        return pdf_buffer.getvalue()
+    except Exception:
+        return None
 
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
@@ -556,7 +561,7 @@ with st.sidebar:
     if st.button(t["btn_stats"], use_container_width=True):
         show_stats_dialog(lang)
 
-final_density = dens_val * 1000 if dens_unit == "g/cm³" else dens_val
+final_density = dens_val * 1000.0 if dens_unit == "g/cm³" else float(dens_val)
 
 # --- HLAVNÍ ČÁST: 4 VARIANTY ---
 st.subheader(t["var_header"])
@@ -586,45 +591,45 @@ for i in range(4):
         variants.append({
             "label": v_label,
             "is_corrugated": is_corrugated,
-            "d_min": d_min,
-            "d_max": d_max,
-            "pitch": pitch
+            "d_min": float(d_min),
+            "d_max": float(d_max),
+            "pitch": float(pitch)
         })
 
-# --- VÝPOČETNÍ LOGIKA ---
-def calculate_dp(v_cfg, flow_list):
-    flow_m3s = flow_list / (60 * 1000)
-    d_m = v_cfg['d_min'] / 1000
-    v_vel = flow_m3s / (np.pi * (d_m/2)**2)
-    Re = (final_density * v_vel * d_m) / visc
-    l_smooth = np.array([(64/r if r < 2300 else 0.3164/r**0.25) for r in Re])
+# --- VÝPOČETNÍ FUNKCE (PARAMETRY PŘEDÁNY EXPLICITNĚ) ---
+def calculate_dp(v_cfg, flow_list, rho, mu, l_mm):
+    flow_m3s = flow_list / (60.0 * 1000.0)
+    d_m = v_cfg['d_min'] / 1000.0
+    v_vel = flow_m3s / (np.pi * (d_m / 2.0)**2)
+    Re = (rho * v_vel * d_m) / mu
+    l_smooth = np.array([(64.0 / r if r < 2300.0 else 0.3164 / (r**0.25)) for r in Re])
     
-    if v_cfg['is_corrugated']:
-        rel_rough = (v_cfg['d_max'] - v_cfg['d_min']) / (2 * v_cfg['d_min'])
-        corr = 1 + (rel_rough * 12) * (0.004 / (v_cfg['pitch']/1000))
+    if v_cfg.get('is_corrugated', False):
+        rel_rough = (v_cfg['d_max'] - v_cfg['d_min']) / (2.0 * v_cfg['d_min'])
+        corr = 1.0 + (rel_rough * 12.0) * (0.004 / (v_cfg['pitch'] / 1000.0))
         l_final = l_smooth * max(corr, 3.2)
     else:
         l_final = l_smooth
         
-    dp_pa = l_final * ((length/1000) / d_m) * (final_density * v_vel**2 / 2)
-    return dp_pa / 1000
+    dp_pa = l_final * ((l_mm / 1000.0) / d_m) * (rho * (v_vel**2) / 2.0)
+    return dp_pa / 1000.0
 
-# --- TLAČÍTKO VÝPOČTU ---
+# --- TLAČÍTKO PRO VÝPOČET ---
 if st.button(t["calc_btn"], use_container_width=True):
     log_to_github()
     
-    # Uložíme surová data výpočtu do session_state
     st.session_state["calc_completed"] = True
     st.session_state["calc_variants"] = variants
-    st.session_state["calc_flow_max"] = flow_max
+    st.session_state["calc_flow_max"] = float(flow_max)
     st.session_state["calc_fluid_name"] = fluid_name
-    st.session_state["calc_temp"] = temp
-    st.session_state["calc_dens_val"] = dens_val
+    st.session_state["calc_temp"] = float(temp)
+    st.session_state["calc_dens_val"] = float(dens_val)
     st.session_state["calc_dens_unit"] = dens_unit
-    st.session_state["calc_visc"] = visc
-    st.session_state["calc_length"] = length
+    st.session_state["calc_visc"] = float(visc)
+    st.session_state["calc_length"] = float(length)
+    st.session_state["calc_final_density"] = float(final_density)
 
-# --- DYNAMICKÉ VYKRESLENÍ VÝSLEDKŮ A PDF V AKTUÁLNÍM JAZYCE ---
+# --- VYKRESLENÍ GRAFU, TABULKY A PDF PROTOKOLU ---
 if st.session_state.get("calc_completed", False):
     c_vars = st.session_state["calc_variants"]
     c_flow_max = st.session_state["calc_flow_max"]
@@ -634,17 +639,20 @@ if st.session_state.get("calc_completed", False):
     c_dens_unit = st.session_state["calc_dens_unit"]
     c_visc = st.session_state["calc_visc"]
     c_len = st.session_state["calc_length"]
+    c_rho = st.session_state["calc_final_density"]
 
     flow_axis = np.linspace(0.1, c_flow_max, 100)
+    
+    # Tvorba grafu
     fig, ax = plt.subplots(figsize=(10, 4.5))
     results = []
 
     for v in c_vars:
-        dp_curve = calculate_dp(v, flow_axis)
+        dp_curve = calculate_dp(v, flow_axis, c_rho, c_visc, c_len)
         ax.plot(flow_axis, dp_curve, lw=2.5, label=v['label'])
         
         type_txt = t["type_corrugated"] if v['is_corrugated'] else t["type_smooth"]
-        cfg_str = f"Ø{v['d_min']:.2f}" if not v['is_corrugated'] else f"Ø{v['d_min']:.2f}/Ø{v['d_max']:.2f} p{v['pitch']}"
+        cfg_str = f"Ø{v['d_min']:.2f}" if not v['is_corrugated'] else f"Ø{v['d_min']:.2f}/Ø{v['d_max']:.2f} p{v['pitch']:.2f}"
         
         results.append({
             t["res_name"]: v['label'],
@@ -658,17 +666,17 @@ if st.session_state.get("calc_completed", False):
     ax.set_ylabel(t["graph_dp"])
     ax.legend()
     ax.grid(True, alpha=0.3)
+    
+    # 1. Zobrazení grafu
+    st.pyplot(fig)
 
-    # Uložení grafu do paměti pro PDF
+    # 2. Uložení PNG grafu pro PDF
     img_buffer = io.BytesIO()
     fig.savefig(img_buffer, format='png', dpi=200, bbox_inches='tight')
+    plt.close(fig)
     img_bytes = img_buffer.getvalue()
 
-    # Zobrazení grafu
-    st.pyplot(fig)
-    plt.close(fig)
-
-    # Sestavení tabulky
+    # 3. Zobrazení tabulky
     df = pd.DataFrame(results)
     loss_col = t["res_loss"]
     ref_val = df.iloc[0][loss_col]
@@ -677,17 +685,18 @@ if st.session_state.get("calc_completed", False):
     
     st.table(df)
 
-    # Generování PDF v aktuálně vybraném jazyce
+    # 4. Tlačítko pro stažení PDF
     pdf_bytes = create_pdf_report(img_bytes, df, c_fluid, c_temp, c_dens_val, c_dens_unit, c_visc, c_len, t)
-    pdf_filename = f"FIP_Analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-
-    st.download_button(
-        label=t["btn_download_pdf"],
-        data=pdf_bytes,
-        file_name=pdf_filename,
-        mime="application/pdf",
-        use_container_width=True
-    )
+    
+    if pdf_bytes:
+        pdf_filename = f"FIP_Analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        st.download_button(
+            label=t["btn_download_pdf"],
+            data=pdf_bytes,
+            file_name=pdf_filename,
+            mime="application/pdf",
+            use_container_width=True
+        )
 '''
 
 with open("app.py", "w", encoding="utf-8") as f:
