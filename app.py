@@ -23,7 +23,7 @@ API_URL = f"https://api.github.com/repos/{GH_USER}/{GH_REPO}/contents/{FILE_PATH
 
 def get_headers():
     return {
-        "Authorization": f"token {GH_TOKEN.strip()}",
+        "Authorization": f"Bearer {GH_TOKEN.strip()}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "Streamlit-App-Logger"
     }
@@ -31,6 +31,7 @@ def get_headers():
 def log_to_github():
     """Zapíše nový řádek přímo do souboru usage_log.csv v GitHub repozitáři."""
     if not GH_TOKEN or not GH_USER or not GH_REPO:
+        st.warning("⚠️ Chybí nastavení GitHub autentizace v Secrets.")
         return
         
     now = datetime.now()
@@ -38,18 +39,22 @@ def log_to_github():
     headers = get_headers()
     
     try:
-        r = requests.get(API_URL, headers=headers, timeout=4)
+        r = requests.get(API_URL, headers=headers, timeout=5)
         if r.status_code == 200:
             file_data = r.json()
             sha = file_data['sha']
             content = base64.b64decode(file_data['content']).decode('utf-8')
             updated_content = content + new_line
             payload = {
-                "message": f"Log calculation: {now.strftime('%Y-%m-%d %H:%M')}",
+                "message": f"Log calculation: {now.strftime('%Y-%m-%d %H:%M:%S')}",
                 "content": base64.b64encode(updated_content.encode('utf-8')).decode('utf-8'),
                 "sha": sha
             }
-            requests.put(API_URL, headers=headers, json=payload, timeout=4)
+            put_r = requests.put(API_URL, headers=headers, json=payload, timeout=5)
+            if put_r.status_code not in [200, 201]:
+                st.toast(f"⚠️ Chyba zápisu na GitHub: HTTP {put_r.status_code}")
+            else:
+                st.toast("✅ Analýza zaznamenána do statistiky.")
         elif r.status_code == 404:
             header = "timestamp,month_year\\n"
             updated_content = header + new_line
@@ -57,9 +62,15 @@ def log_to_github():
                 "message": "Init usage log",
                 "content": base64.b64encode(updated_content.encode('utf-8')).decode('utf-8')
             }
-            requests.put(API_URL, headers=headers, json=payload, timeout=4)
-    except Exception:
-        pass
+            put_r = requests.put(API_URL, headers=headers, json=payload, timeout=5)
+            if put_r.status_code not in [200, 201]:
+                st.toast(f"⚠️ Chyba vytvoření logu na GitHub: HTTP {put_r.status_code}")
+            else:
+                st.toast("✅ Vytvořen nový statistický log na GitHubu.")
+        else:
+            st.toast(f"⚠️ GitHub vrátil kód {r.status_code} při čtení logu.")
+    except Exception as e:
+        st.toast(f"⚠️ Chyba spojení s GitHubem: {e}")
 
 def fetch_stats_from_github():
     """Stáhne a spočítá statistiku z GitHub CSV souboru."""
@@ -84,9 +95,9 @@ def fetch_stats_from_github():
             
             return total_count, curr_month_count, monthly_df, None
         elif r.status_code == 404:
-            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Zatím nebyl proveden žádný výpočet."
+            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Zatím nebyl proveden žádný výpočet (soubor usage_log.csv ještě neexistuje)."
         elif r.status_code in [401, 403]:
-            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba autorizace ({r.status_code}): Zkontrolujte platnost tokenu v Secrets."
+            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba autorizace ({r.status_code}): Token v Secrets nemá oprávnění 'repo'."
         else:
             return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"GitHub API error: HTTP {r.status_code}"
     except Exception as e:
@@ -434,6 +445,7 @@ with st.sidebar:
 
     st.divider()
 
+    # Tlačítko pro vyvolání statistiky
     st.header(t["usage_header"])
     if st.button(t["btn_stats"], use_container_width=True):
         show_stats_dialog(lang)
