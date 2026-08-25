@@ -6,61 +6,55 @@ import requests
 import os
 from datetime import datetime
 
-# --- BEZPEČNÉ ANONYMNÍ POČÍTADLO (BEZ GOOGLE ÚČTU) ---
-# Unikátní prefix projektu (můžete si zvolit jakýkoliv vlastní text)
-APP_NAMESPACE = "fip-hydraulicky-srovnavac-v4"
+# --- SPOLEHLIVÉ ANONYMNÍ POČÍTADLO ---
+APP_NAMESPACE = "fip-hydraulicky-kalkulator-stats"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-def log_calculation():
-    """Navýší celkové počítadlo a počítadlo pro aktuální měsíc."""
+def safe_api_hit(url):
+    """Pomocná funkce pro bezpečné volání počítadla."""
     try:
-        now = datetime.now()
-        month_key = now.strftime("%Y-%m")
-        
-        # 1. Navýšení celkového součtu
-        requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/total/up", timeout=3)
-        # 2. Navýšení pro konkrétní měsíc
-        requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/{month_key}/up", timeout=3)
+        r = requests.get(url, headers=HEADERS, timeout=4)
+        if r.status_code == 200:
+            return r.json().get("value", r.json().get("count", 0))
     except Exception:
         pass
+    return None
+
+def log_calculation():
+    """Navýší celkové počítadlo i počítadlo pro aktuální měsíc."""
+    now = datetime.now()
+    month_key = now.strftime("%Y_%m")
+    
+    # Navýšení celkem
+    safe_api_hit(f"https://api.countapi.xyz/hit/{APP_NAMESPACE}/total")
+    # Navýšení pro měsíc
+    safe_api_hit(f"https://api.countapi.xyz/hit/{APP_NAMESPACE}/{month_key}")
 
 def get_stats():
-    """Načte hodnoty počítadel."""
+    """Načte data ze serveru."""
     now = datetime.now()
-    curr_month_key = now.strftime("%Y-%m")
+    curr_month_key = now.strftime("%Y_%m")
     
-    total_count = 0
-    curr_month_count = 0
-    monthly_records = []
-    
-    # Načtení celkového součtu
-    try:
-        r_total = requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/total", timeout=3)
-        if r_total.status_code == 200:
-            total_count = r_total.json().get("count", 0)
-    except Exception:
+    # 1. Celkový součet
+    total_count = safe_api_hit(f"https://api.countapi.xyz/get/{APP_NAMESPACE}/total")
+    if total_count is None:
         total_count = 0
 
-    # Načtení aktuálního měsíce
-    try:
-        r_curr = requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/{curr_month_key}", timeout=3)
-        if r_curr.status_code == 200:
-            curr_month_count = r_curr.json().get("count", 0)
-    except Exception:
+    # 2. Tento měsíc
+    curr_month_count = safe_api_hit(f"https://api.countapi.xyz/get/{APP_NAMESPACE}/{curr_month_key}")
+    if curr_month_count is None:
         curr_month_count = 0
 
-    # Přehled pro aktuální a minulé měsíce
-    # Kontroluje posledních 6 měsíců
+    # 3. Přehled za posledních 6 měsíců
+    monthly_records = []
     for m_offset in range(6):
         m_date = pd.date_range(end=now, periods=6, freq='MS')[5 - m_offset]
-        m_str = m_date.strftime("%Y-%m")
-        try:
-            r_m = requests.get(f"https://api.counterapi.dev/v1/{APP_NAMESPACE}/{m_str}", timeout=2)
-            if r_m.status_code == 200:
-                cnt = r_m.json().get("count", 0)
-                if cnt > 0:
-                    monthly_records.append({"Měsíc": m_str, "Počet analýz": cnt})
-        except Exception:
-            pass
+        m_api_key = m_date.strftime("%Y_%m")
+        m_display = m_date.strftime("%Y-%m")
+        
+        cnt = safe_api_hit(f"https://api.countapi.xyz/get/{APP_NAMESPACE}/{m_api_key}")
+        if cnt and cnt > 0:
+            monthly_records.append({"Měsíc": m_display, "Počet analýz": cnt})
 
     monthly_df = pd.DataFrame(monthly_records) if monthly_records else pd.DataFrame(columns=["Měsíc", "Počet analýz"])
     return total_count, curr_month_count, monthly_df
