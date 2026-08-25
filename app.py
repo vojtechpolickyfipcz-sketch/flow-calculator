@@ -2,54 +2,58 @@ app_code = '''import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import sqlite3
 import os
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
 
-# --- DATABÁZE PRO STATISTIKY POUŽITÍ ---
-DB_FILE = "analytics.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS calculations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            month_year TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+# --- GOOGLE SHEETS KONFIGURACE PRO TRVALÉ UKLÁDÁNÍ ---
+# Vložte sem URL vaší veřejně editovatelné Google tabulky
+SHEET_URL = "https://docs.google.com/spreadsheets/d/VASE_ID_TABULKY/edit"
 
 def log_calculation():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    now = datetime.now()
-    month_year = now.strftime("%Y-%m")
-    c.execute("INSERT INTO calculations (timestamp, month_year) VALUES (?, ?)", (now, month_year))
-    conn.commit()
-    conn.close()
+    """Zapíše nový řádek do Google Tabulky."""
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_existing = conn.read(spreadsheet=SHEET_URL, ttl=0)
+        
+        now = datetime.now()
+        new_row = pd.DataFrame([{
+            "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "month_year": now.strftime("%Y-%m")
+        }])
+        
+        if df_existing is None or df_existing.empty:
+            updated_df = new_row
+        else:
+            updated_df = pd.concat([df_existing, new_row], ignore_index=True)
+            
+        conn.update(spreadsheet=SHEET_URL, data=updated_df)
+    except Exception as e:
+        st.sidebar.warning(f"Chyba zápisu do Google Sheets: {e}")
 
 def get_stats():
-    conn = sqlite3.connect(DB_FILE)
-    total_count = pd.read_sql_query("SELECT COUNT(*) as count FROM calculations", conn).iloc[0]["count"]
-    
-    current_month_str = datetime.now().strftime("%Y-%m")
-    curr_month_count = pd.read_sql_query(
-        "SELECT COUNT(*) as count FROM calculations WHERE month_year = ?", 
-        conn, 
-        params=(current_month_str,)
-    ).iloc[0]["count"]
-    
-    monthly_df = pd.read_sql_query(
-        "SELECT month_year as 'Měsíc', COUNT(*) as 'Počet analýz' FROM calculations GROUP BY month_year ORDER BY month_year DESC", 
-        conn
-    )
-    conn.close()
-    return total_count, curr_month_count, monthly_df
-
-init_db()
+    """Načte data z Google Tabulky a spočítá statistiky."""
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(spreadsheet=SHEET_URL, ttl=2)
+        
+        if df is None or df.empty or "month_year" not in df.columns:
+            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"])
+        
+        # Očištění od prázdných řádků
+        df = df.dropna(subset=["month_year"])
+        total_count = len(df)
+        
+        current_month_str = datetime.now().strftime("%Y-%m")
+        curr_month_count = len(df[df["month_year"] == current_month_str])
+        
+        monthly_df = df["month_year"].value_counts().reset_index()
+        monthly_df.columns = ["Měsíc", "Počet analýz"]
+        monthly_df = monthly_df.sort_values(by="Měsíc", ascending=False)
+        
+        return total_count, curr_month_count, monthly_df
+    except Exception:
+        return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"])
 
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
@@ -68,7 +72,6 @@ st.markdown(
             visibility: hidden !important;
             pointer-events: none !important;
         }
-        /* Kompaktní styl tlačítek pro volbu jazyka */
         div[data-testid="stHorizontalBlock"] button {
             padding: 2px 6px !important;
             font-size: 13px !important;
@@ -78,7 +81,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Inicializace zvoleného jazyka v session_state
 if "current_lang" not in st.session_state:
     st.session_state["current_lang"] = "cs"
 
@@ -86,7 +88,7 @@ if "current_lang" not in st.session_state:
 TRANSLATIONS = {
     "cs": {
         "title": "📊 Kalkulátor tlakových ztrát: Hladká vs. Vlnitá trubka",
-        "subtitle": "Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý výpočet a porovnání tlakových ztrát (Δp) při proudění kapalin v potrubí. Umožňuje přímo porovnat chování hladkých trubek a trubek s vlnovcovým profilem.",
+        "subtitle": "Nástroj pro porovnání tlakových ztrát s možností vlastního pojmenování variant. Cílem kalkulátoru je najít řešení a vidět dopad aplikace vlnitých profilů a jejich vliv na zvýšení odporu.",
         "btn_manual": "❓ Nápověda / Manuál",
         "param_media": "💧 Parametry média",
         "fluid_name": "Název kapaliny",
@@ -370,7 +372,6 @@ def show_manual(lang_code):
 top_left, top_right = st.columns([4.2, 1.8])
 
 with top_right:
-    # Řádek tlačítek s vlaječkami
     f_cols = st.columns(5)
     flags = [
         ("🇨🇿", "CZ", "cs"),
@@ -382,7 +383,6 @@ with top_right:
     
     for idx, (emoji, code_label, lang_id) in enumerate(flags):
         with f_cols[idx]:
-            # Zvýraznění aktivního jazyka
             btn_type = "primary" if st.session_state["current_lang"] == lang_id else "secondary"
             if st.button(f"{emoji} {code_label}", key=f"btn_lang_{lang_id}", type=btn_type, use_container_width=True):
                 st.session_state["current_lang"] = lang_id
@@ -391,7 +391,6 @@ with top_right:
     lang = st.session_state["current_lang"]
     t = TRANSLATIONS[lang]
 
-    # Tlačítko nápovědy přímo pod vlaječkami
     if st.button(t["btn_manual"], use_container_width=True):
         show_manual(lang)
 
@@ -535,5 +534,10 @@ if st.button(t["calc_btn"], use_container_width=True):
 with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
+# Aktualizace requirements.txt s knihovnou pro Google Sheets
+with open("requirements.txt", "w", encoding="utf-8") as f:
+    f.write("streamlit\nnumpy\nmatplotlib\npandas\nst-gsheets-connection\n")
+
 from google.colab import files
 files.download("app.py")
+files.download("requirements.txt")
