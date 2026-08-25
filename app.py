@@ -99,7 +99,7 @@ def fetch_stats_from_github():
         return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba spojení: {e}"
 
 # --- GENEROVÁNÍ PDF REPORTU ---
-def create_pdf_report(fig, results_df, fluid_name, temp, dens_val, dens_unit, visc, length, t):
+def create_pdf_report(img_bytes, results_df, fluid_name, temp, dens_val, dens_unit, visc, length, t):
     pdf_buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         pdf_buffer,
@@ -113,7 +113,6 @@ def create_pdf_report(fig, results_df, fluid_name, temp, dens_val, dens_unit, vi
     elements = []
     styles = getSampleStyleSheet()
     
-    # Styl záhlaví
     title_style = ParagraphStyle(
         'MainTitle',
         parent=styles['Heading1'],
@@ -123,12 +122,10 @@ def create_pdf_report(fig, results_df, fluid_name, temp, dens_val, dens_unit, vi
         spaceAfter=10
     )
     
-    # 1. Záhlaví protokolu
     elements.append(Paragraph(f"<b>{t['pdf_report_title']}</b>", title_style))
     elements.append(Paragraph(f"<b>{t['pdf_generated']}:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
     elements.append(Spacer(1, 10))
     
-    # 2. Parametry měření (Tabulka)
     param_data = [
         [t['pdf_fluid'], str(fluid_name), t['pdf_temp'], f"{temp} °C"],
         [t['pdf_density'], f"{dens_val} {dens_unit}", t['pdf_visc'], f"{visc:.4f} Pa·s"],
@@ -148,14 +145,11 @@ def create_pdf_report(fig, results_df, fluid_name, temp, dens_val, dens_unit, vi
     elements.append(param_table)
     elements.append(Spacer(1, 12))
     
-    # 3. Uložení a vložení grafu do PDF
-    img_buf = io.BytesIO()
-    fig.savefig(img_buf, format='png', dpi=200, bbox_inches='tight')
-    img_buf.seek(0)
-    elements.append(RLImage(img_buf, width=520, height=240))
+    # Vložení grafu z paměťového bufferu
+    elements.append(RLImage(io.BytesIO(img_bytes), width=520, height=240))
     elements.append(Spacer(1, 12))
     
-    # 4. Výsledková tabulka
+    # Výsledková tabulka
     table_headers = list(results_df.columns)
     table_rows = [table_headers] + results_df.values.tolist()
     
@@ -176,7 +170,7 @@ def create_pdf_report(fig, results_df, fluid_name, temp, dens_val, dens_unit, vi
     
     doc.build(elements)
     pdf_buffer.seek(0)
-    return pdf_buffer
+    return pdf_buffer.getvalue()
 
 # --- VZHLED STRÁNKY ---
 st.set_page_config(page_title="Hydraulický Srovnávač 4.2", layout="wide")
@@ -611,7 +605,7 @@ def calculate_dp(v_cfg, flow_list):
     dp_pa = l_final * ((length/1000) / d_m) * (final_density * v_vel**2 / 2)
     return dp_pa / 1000
 
-# --- VÝSTUPY ---
+# --- VÝSTUPY S UKLÁDÁNÍM DO SESSION STATE ---
 if st.button(t["calc_btn"], use_container_width=True):
     log_to_github()
     
@@ -637,26 +631,35 @@ if st.button(t["calc_btn"], use_container_width=True):
     ax.legend()
     ax.grid(True, alpha=0.3)
     
-    st.pyplot(fig)
+    # Uložení grafu do paměti jako PNG bajty pro PDF i zobrazení
+    img_buffer = io.BytesIO()
+    fig.savefig(img_buffer, format='png', dpi=200, bbox_inches='tight')
+    plt.close(fig)
+    img_bytes = img_buffer.getvalue()
 
-    # Tabulka
+    # Příprava tabulky
     df = pd.DataFrame(results)
     loss_col = t["res_loss"]
     ref_val = df.iloc[0][loss_col]
     df[loss_col] = df[loss_col].map('{:.3f}'.format)
     df[t["res_diff"]] = df[loss_col].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
-    st.table(df)
+    
+    # Uložení celého výsledku do session_state
+    st.session_state["calc_completed"] = True
+    st.session_state["graph_png"] = img_bytes
+    st.session_state["result_df"] = df
+    st.session_state["pdf_bytes"] = create_pdf_report(img_bytes, df, fluid_name, temp, dens_val, dens_unit, visc, length, t)
+    st.session_state["pdf_filename"] = f"FIP_Analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
-    # --- TLAČÍTKO PRO EXPORT DO PDF ---
-    pdf_bytes = create_pdf_report(fig, df, fluid_name, temp, dens_val, dens_unit, visc, length, t)
-    
-    filename_clean = "".join(c for c in fluid_name if c.isalnum() or c in (' ', '_', '-')).strip()
-    pdf_filename = f"FIP_Analysis_{filename_clean}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-    
+# Zobrazení výsledků pokud jsou v session_state (přetrvá i po stažení PDF)
+if st.session_state.get("calc_completed", False):
+    st.image(st.session_state["graph_png"], use_container_width=True)
+    st.table(st.session_state["result_df"])
+
     st.download_button(
         label=t["btn_download_pdf"],
-        data=pdf_bytes,
-        file_name=pdf_filename,
+        data=st.session_state["pdf_bytes"],
+        file_name=st.session_state["pdf_filename"],
         mime="application/pdf",
         use_container_width=True
     )
@@ -665,7 +668,7 @@ if st.button(t["calc_btn"], use_container_width=True):
 with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
-# requirements.txt s knihovnou reportlab pro PDF
+# requirements.txt s knihovnou reportlab
 with open("requirements.txt", "w", encoding="utf-8") as f:
     f.write("streamlit\nnumpy\nmatplotlib\npandas\nrequests\nreportlab\n")
 
