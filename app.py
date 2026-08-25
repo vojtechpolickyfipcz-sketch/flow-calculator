@@ -145,11 +145,9 @@ def create_pdf_report(img_bytes, results_df, fluid_name, temp, dens_val, dens_un
     elements.append(param_table)
     elements.append(Spacer(1, 12))
     
-    # Vložení grafu z paměťového bufferu
     elements.append(RLImage(io.BytesIO(img_bytes), width=520, height=240))
     elements.append(Spacer(1, 12))
     
-    # Výsledková tabulka
     table_headers = list(results_df.columns)
     table_rows = [table_headers] + results_df.values.tolist()
     
@@ -585,7 +583,13 @@ for i in range(4):
             st.write("---")
             st.caption(t["smooth_note"])
             
-        variants.append({"label": v_label, "is_corrugated": is_corrugated, "type_label": v_type_sel, "d_min": d_min, "d_max": d_max, "pitch": pitch})
+        variants.append({
+            "label": v_label,
+            "is_corrugated": is_corrugated,
+            "d_min": d_min,
+            "d_max": d_max,
+            "pitch": pitch
+        })
 
 # --- VÝPOČETNÍ LOGIKA ---
 def calculate_dp(v_cfg, flow_list):
@@ -605,61 +609,82 @@ def calculate_dp(v_cfg, flow_list):
     dp_pa = l_final * ((length/1000) / d_m) * (final_density * v_vel**2 / 2)
     return dp_pa / 1000
 
-# --- VÝSTUPY S UKLÁDÁNÍM DO SESSION STATE ---
+# --- TLAČÍTKO VÝPOČTU ---
 if st.button(t["calc_btn"], use_container_width=True):
     log_to_github()
     
-    flow_axis = np.linspace(0.1, flow_max, 100)
+    # Uložíme surová data výpočtu do session_state
+    st.session_state["calc_completed"] = True
+    st.session_state["calc_variants"] = variants
+    st.session_state["calc_flow_max"] = flow_max
+    st.session_state["calc_fluid_name"] = fluid_name
+    st.session_state["calc_temp"] = temp
+    st.session_state["calc_dens_val"] = dens_val
+    st.session_state["calc_dens_unit"] = dens_unit
+    st.session_state["calc_visc"] = visc
+    st.session_state["calc_length"] = length
+
+# --- DYNAMICKÉ VYKRESLENÍ VÝSLEDKŮ A PDF V AKTUÁLNÍM JAZYCE ---
+if st.session_state.get("calc_completed", False):
+    c_vars = st.session_state["calc_variants"]
+    c_flow_max = st.session_state["calc_flow_max"]
+    c_fluid = st.session_state["calc_fluid_name"]
+    c_temp = st.session_state["calc_temp"]
+    c_dens_val = st.session_state["calc_dens_val"]
+    c_dens_unit = st.session_state["calc_dens_unit"]
+    c_visc = st.session_state["calc_visc"]
+    c_len = st.session_state["calc_length"]
+
+    flow_axis = np.linspace(0.1, c_flow_max, 100)
     fig, ax = plt.subplots(figsize=(10, 4.5))
     results = []
 
-    for i, v in enumerate(variants):
+    for v in c_vars:
         dp_curve = calculate_dp(v, flow_axis)
         ax.plot(flow_axis, dp_curve, lw=2.5, label=v['label'])
         
+        type_txt = t["type_corrugated"] if v['is_corrugated'] else t["type_smooth"]
         cfg_str = f"Ø{v['d_min']:.2f}" if not v['is_corrugated'] else f"Ø{v['d_min']:.2f}/Ø{v['d_max']:.2f} p{v['pitch']}"
+        
         results.append({
             t["res_name"]: v['label'],
-            t["res_type"]: v['type_label'],
+            t["res_type"]: type_txt,
             t["res_cfg"]: cfg_str,
             t["res_loss"]: dp_curve[-1]
         })
 
-    ax.set_title(f"Report: {fluid_name} @ {temp}°C")
+    ax.set_title(f"Report: {c_fluid} @ {c_temp}°C")
     ax.set_xlabel(t["graph_flow"])
     ax.set_ylabel(t["graph_dp"])
     ax.legend()
     ax.grid(True, alpha=0.3)
-    
-    # Uložení grafu do paměti jako PNG bajty pro PDF i zobrazení
+
+    # Uložení grafu do paměti pro PDF
     img_buffer = io.BytesIO()
     fig.savefig(img_buffer, format='png', dpi=200, bbox_inches='tight')
-    plt.close(fig)
     img_bytes = img_buffer.getvalue()
 
-    # Příprava tabulky
+    # Zobrazení grafu
+    st.pyplot(fig)
+    plt.close(fig)
+
+    # Sestavení tabulky
     df = pd.DataFrame(results)
     loss_col = t["res_loss"]
     ref_val = df.iloc[0][loss_col]
     df[loss_col] = df[loss_col].map('{:.3f}'.format)
     df[t["res_diff"]] = df[loss_col].astype(float).apply(lambda x: f"{((x/ref_val)-1)*100:+.2f} %" if ref_val > 0 else "0.00 %")
     
-    # Uložení celého výsledku do session_state
-    st.session_state["calc_completed"] = True
-    st.session_state["graph_png"] = img_bytes
-    st.session_state["result_df"] = df
-    st.session_state["pdf_bytes"] = create_pdf_report(img_bytes, df, fluid_name, temp, dens_val, dens_unit, visc, length, t)
-    st.session_state["pdf_filename"] = f"FIP_Analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    st.table(df)
 
-# Zobrazení výsledků pokud jsou v session_state (přetrvá i po stažení PDF)
-if st.session_state.get("calc_completed", False):
-    st.image(st.session_state["graph_png"], use_container_width=True)
-    st.table(st.session_state["result_df"])
+    # Generování PDF v aktuálně vybraném jazyce
+    pdf_bytes = create_pdf_report(img_bytes, df, c_fluid, c_temp, c_dens_val, c_dens_unit, c_visc, c_len, t)
+    pdf_filename = f"FIP_Analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
     st.download_button(
         label=t["btn_download_pdf"],
-        data=st.session_state["pdf_bytes"],
-        file_name=st.session_state["pdf_filename"],
+        data=pdf_bytes,
+        file_name=pdf_filename,
         mime="application/pdf",
         use_container_width=True
     )
@@ -668,10 +693,5 @@ if st.session_state.get("calc_completed", False):
 with open("app.py", "w", encoding="utf-8") as f:
     f.write(app_code)
 
-# requirements.txt s knihovnou reportlab
-with open("requirements.txt", "w", encoding="utf-8") as f:
-    f.write("streamlit\nnumpy\nmatplotlib\npandas\nrequests\nreportlab\n")
-
 from google.colab import files
 files.download("app.py")
-files.download("requirements.txt")
