@@ -1,8 +1,3 @@
-# --- DOPLŇTE VAŠE ÚDAJE Z GITHUB ---
-GH_USER = "vojtechpolickyfipcz-sketch"
-GH_REPO = "flow-calculator"  
-GH_TOKEN = "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"
-
 app_code = '''import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,26 +8,37 @@ import os
 import io
 from datetime import datetime
 
-# --- GITHUB KONFIGURACE PRO TRVALÝ ZÁPIS ---
-GH_TOKEN = "__GH_TOKEN__"
-GH_USER = "__GH_USER__"
-GH_REPO = "__GH_REPO__"
-FILE_PATH = "usage_log.csv"
+# --- GITHUB AUTENTIZACE ZE SECRETS ---
+try:
+    GH_TOKEN = st.secrets["GH_TOKEN"]
+    GH_USER = st.secrets["GH_USER"]
+    GH_REPO = st.secrets["GH_REPO"]
+except Exception:
+    GH_TOKEN = ""
+    GH_USER = ""
+    GH_REPO = ""
 
+FILE_PATH = "usage_log.csv"
 API_URL = f"https://api.github.com/repos/{GH_USER}/{GH_REPO}/contents/{FILE_PATH}"
-HEADERS = {
-    "Authorization": f"token {GH_TOKEN}",
-    "Accept": "application/vnd.github.v3+json",
-    "User-Agent": "Streamlit-Calculator-Logger"
-}
+
+def get_headers():
+    return {
+        "Authorization": f"token {GH_TOKEN.strip()}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "Streamlit-App-Logger"
+    }
 
 def log_to_github():
     """Zapíše nový řádek přímo do souboru usage_log.csv v GitHub repozitáři."""
+    if not GH_TOKEN or not GH_USER or not GH_REPO:
+        return
+        
     now = datetime.now()
     new_line = f"{now.strftime('%Y-%m-%d %H:%M:%S')},{now.strftime('%Y-%m')}\\n"
+    headers = get_headers()
     
     try:
-        r = requests.get(API_URL, headers=HEADERS, timeout=5)
+        r = requests.get(API_URL, headers=headers, timeout=4)
         if r.status_code == 200:
             file_data = r.json()
             sha = file_data['sha']
@@ -43,7 +49,7 @@ def log_to_github():
                 "content": base64.b64encode(updated_content.encode('utf-8')).decode('utf-8'),
                 "sha": sha
             }
-            requests.put(API_URL, headers=HEADERS, json=payload, timeout=5)
+            requests.put(API_URL, headers=headers, json=payload, timeout=4)
         elif r.status_code == 404:
             header = "timestamp,month_year\\n"
             updated_content = header + new_line
@@ -51,14 +57,18 @@ def log_to_github():
                 "message": "Init usage log",
                 "content": base64.b64encode(updated_content.encode('utf-8')).decode('utf-8')
             }
-            requests.put(API_URL, headers=HEADERS, json=payload, timeout=5)
+            requests.put(API_URL, headers=headers, json=payload, timeout=4)
     except Exception:
         pass
 
 def fetch_stats_from_github():
     """Stáhne a spočítá statistiku z GitHub CSV souboru."""
+    if not GH_TOKEN or not GH_USER or not GH_REPO:
+        return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Chybí nastavení v Secrets (GH_TOKEN, GH_USER, GH_REPO)."
+        
+    headers = get_headers()
     try:
-        r = requests.get(API_URL, headers=HEADERS, timeout=5)
+        r = requests.get(API_URL, headers=headers, timeout=5)
         if r.status_code == 200:
             content = base64.b64decode(r.json()['content']).decode('utf-8')
             df = pd.read_csv(io.StringIO(content))
@@ -75,10 +85,10 @@ def fetch_stats_from_github():
             return total_count, curr_month_count, monthly_df, None
         elif r.status_code == 404:
             return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Zatím nebyl proveden žádný výpočet."
-        elif r.status_code == 401 or r.status_code == 403:
-            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), "Neplatný nebo zneplatněný GitHub Token (401/403)."
+        elif r.status_code in [401, 403]:
+            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba autorizace ({r.status_code}): Zkontrolujte platnost tokenu v Secrets."
         else:
-            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba serveru GitHub: HTTP {r.status_code}"
+            return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"GitHub API error: HTTP {r.status_code}"
     except Exception as e:
         return 0, 0, pd.DataFrame(columns=["Měsíc", "Počet analýz"]), f"Chyba spojení: {e}"
 
@@ -274,7 +284,7 @@ Hydraulický Srovnávač je interaktivní webový nástroj určený pro rychlý 
         "var_title": "Varianta",
         "var_name": "Nume/Notă",
         "var_name_help": "Denumiți varianta",
-        "var_type": "Typ",
+        "var_type": "Tip",
         "type_smooth": "Neted",
         "type_corrugated": "Ondulat",
         "d_min": "Ø Interior [mm]",
@@ -424,7 +434,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Tlačítko pro vyvolání statistiky
     st.header(t["usage_header"])
     if st.button(t["btn_stats"], use_container_width=True):
         show_stats_dialog(lang)
@@ -478,7 +487,6 @@ def calculate_dp(v_cfg, flow_list):
 
 # --- VÝSTUPY ---
 if st.button(t["calc_btn"], use_container_width=True):
-    # Zápis nového řádku přímo na GitHub
     log_to_github()
     
     flow_axis = np.linspace(0.1, flow_max, 100)
@@ -514,11 +522,8 @@ if st.button(t["calc_btn"], use_container_width=True):
     st.table(df)
 '''
 
-# Bezpečné dosazení proměnných bez poškození f-stringů
-final_code = app_code.replace("__GH_TOKEN__", GH_TOKEN).replace("__GH_USER__", GH_USER).replace("__GH_REPO__", GH_REPO)
-
 with open("app.py", "w", encoding="utf-8") as f:
-    f.write(final_code)
+    f.write(app_code)
 
 from google.colab import files
 files.download("app.py")
